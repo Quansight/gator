@@ -69,6 +69,7 @@ export interface IPkgPanelState {
    * Current search term
    */
   searchTerm: string;
+  visiblePackages: Array<Conda.IPackage>;
 }
 
 /** Top level React component for widget */
@@ -84,6 +85,7 @@ export class CondaPkgPanel extends React.Component<
       hasDescription: false,
       hasUpdate: false,
       packages: [],
+      visiblePackages: [],
       selected: [],
       searchTerm: '',
       activeFilter: PkgFilters.All
@@ -157,6 +159,7 @@ export class CondaPkgPanel extends React.Component<
         INotification.error(error.message);
       }
     }
+    this.updateVisiblePackages()
   }
 
   handleCategoryChanged(event: React.ChangeEvent<HTMLSelectElement>): void {
@@ -167,6 +170,7 @@ export class CondaPkgPanel extends React.Component<
     this.setState({
       activeFilter: event.target.value as PkgFilters
     });
+    this.updateVisiblePackages()
   }
 
   handleClick(pkg: Conda.IPackage): void {
@@ -249,14 +253,64 @@ export class CondaPkgPanel extends React.Component<
     });
   };
 
-  handleSearch(event: React.FormEvent): void {
+    /**
+     * Update the list of visible packages.
+     *
+     * @param {Array<Conda.IPackage>} [packages] - List of packages to show; if undefined,
+     * this.state.packages will be used.
+     */
+    updateVisiblePackages(packages?: Array<Conda.IPackage>): void {
+        const pkgs = packages === undefined ? this.state.packages : packages;
+        this.setState({
+            visiblePackages: this.filterPackages(pkgs)
+        })
+        return;
+    }
+
+  handleSearch(event?: React.FormEvent): void {
     if (this.state.isApplyingChanges) {
       return;
     }
 
-    this.setState({
-      searchTerm: (event.target as HTMLInputElement).value
-    });
+    // If the model supports searching, make a query. Otherwise, do a simple filter on package name.
+    const searchTerm = (event.target as HTMLInputElement).value
+    const lowerSearch = searchTerm.toLowerCase();
+    if (Object.prototype.hasOwnProperty.call(this._model, 'searchPackages')) {
+        this._model.searchPackages(this._currentEnvironment, lowerSearch).then(packages => {
+            this.updateVisiblePackages(packages)
+        })
+    } else {
+        this.updateVisiblePackages(this.state.packages.filter(pkg => {
+            return (
+                pkg.name.indexOf(searchTerm) >= 0 ||
+                (
+                    this.state.hasDescription && (
+                        pkg.summary.indexOf(searchTerm) >= 0 ||
+                        pkg.keywords.indexOf(lowerSearch) >= 0 ||
+                        pkg.tags.indexOf(lowerSearch) >= 0
+                    )
+                )
+            )
+        }))
+    }
+
+    this.setState({searchTerm});
+  }
+
+  filterPackages(packages: Array<Conda.IPackage>): Array<Conda.IPackage> {
+    if (this.state.activeFilter === PkgFilters.All) {
+      return packages;
+    } else if (this.state.activeFilter === PkgFilters.Installed) {
+      return packages.filter(pkg => pkg.version_installed);
+    } else if (this.state.activeFilter === PkgFilters.Available) {
+      return packages.filter(pkg => !pkg.version_installed);
+    } else if (this.state.activeFilter === PkgFilters.Updatable) {
+      return packages.filter(pkg => pkg.updatable);
+    } else if (this.state.activeFilter === PkgFilters.Selected) {
+      return packages.filter(
+        pkg => this.state.selected.indexOf(pkg) >= 0
+      );
+    }
   }
 
   async handleUpdateAll(): Promise<void> {
@@ -477,6 +531,7 @@ export class CondaPkgPanel extends React.Component<
       if (packages !== undefined) {
         this.setState({ packages });
       }
+      this.updateVisiblePackages(packages);
       this.setState({
         isLoading: false
       });
@@ -484,37 +539,6 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
-    let filteredPkgs: Conda.IPackage[] = [];
-    if (this.state.activeFilter === PkgFilters.All) {
-      filteredPkgs = this.state.packages;
-    } else if (this.state.activeFilter === PkgFilters.Installed) {
-      filteredPkgs = this.state.packages.filter(pkg => pkg.version_installed);
-    } else if (this.state.activeFilter === PkgFilters.Available) {
-      filteredPkgs = this.state.packages.filter(pkg => !pkg.version_installed);
-    } else if (this.state.activeFilter === PkgFilters.Updatable) {
-      filteredPkgs = this.state.packages.filter(pkg => pkg.updatable);
-    } else if (this.state.activeFilter === PkgFilters.Selected) {
-      filteredPkgs = this.state.packages.filter(
-        pkg => this.state.selected.indexOf(pkg) >= 0
-      );
-    }
-
-    let searchPkgs: Conda.IPackage[] = [];
-    if (this.state.searchTerm === null) {
-      searchPkgs = filteredPkgs;
-    } else {
-      searchPkgs = filteredPkgs.filter(pkg => {
-        const lowerSearch = this.state.searchTerm.toLowerCase();
-        return (
-          pkg.name.indexOf(this.state.searchTerm) >= 0 ||
-          (this.state.hasDescription &&
-            (pkg.summary.indexOf(this.state.searchTerm) >= 0 ||
-              pkg.keywords.indexOf(lowerSearch) >= 0 ||
-              pkg.tags.indexOf(lowerSearch) >= 0))
-        );
-      });
-    }
-
     return (
       <div className={Style.Panel}>
         <CondaPkgToolBar
@@ -535,7 +559,7 @@ export class CondaPkgPanel extends React.Component<
           hasDescription={
             this.state.hasDescription && this.props.width > PANEL_SMALL_WIDTH
           }
-          packages={searchPkgs}
+          packages={this.state.visiblePackages}
           onPkgClick={this.handleClick}
           onPkgChange={this.handleVersionSelection}
           onPkgGraph={this.handleDependenciesGraph}

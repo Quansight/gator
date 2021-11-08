@@ -131,13 +131,15 @@ export async function searchPackages(
  */
 export async function fetchPackages(
   baseUrl: string,
+  searchTerm: string,
   page = 1,
   size = 100
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
+  const searchParam = searchTerm == undefined ? '' : `search=${searchTerm}&`;
   const response = await fetch(
     `${getServerUrl(
       baseUrl
-    )}/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name`
+    )}/package/?${searchParam}page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name`
   );
   if (response.ok) {
     return await response.json();
@@ -153,6 +155,7 @@ export async function fetchPackages(
  * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
  * @param {string} namespace - Name of the namespace to be searched
  * @param {string} environment - Name of the environment to be searched
+ * @param {string} [searchTerm] - Optionally provide a search term to filter the installed packages
  * @return {Promise<IPaginatedResult<ICondaStorePackage>>} List of packages in the given namespace/environment
  * combination
  */
@@ -160,6 +163,7 @@ export async function fetchEnvironmentPackages(
   baseUrl: string,
   namespace: string,
   environment: string,
+  searchTerm: string = undefined,
   page = 1,
   size = 100
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
@@ -176,34 +180,16 @@ export async function fetchEnvironmentPackages(
 
   if (response.ok) {
     const { data } = await response.json();
+
+    const searchParam = searchTerm == undefined ? '' : `search=${searchTerm}&`;
     response = await fetch(
       `${getServerUrl(baseUrl)}/build/${
         data.current_build_id
-      }/packages/?page=${page}&size=${size}&sort_by=name`
+      }/packages/?${searchParam}page=${page}&size=${size}&sort_by=name`
     );
     if (response.ok) {
       return response.json();
     }
-  }
-  return {};
-}
-
-/**
- * List the packages for the given build.
- *
- * @async
- * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
- * @param {number} build_id - Build for which the packages are to be listed
- * @return {Promise<IPaginatedResult<ICondaStorePackage>>} List of packages that are part of the
- * given build
- */
-export async function fetchBuildPackages(
-  baseUrl: string,
-  build_id: number
-): Promise<IPaginatedResult<ICondaStorePackage>> {
-  const response = await fetch(`${getServerUrl(baseUrl)}/build/${build_id}/`);
-  if (response.ok) {
-    return await response.json();
   }
   return {};
 }
@@ -304,6 +290,7 @@ export async function removePackages(
       baseUrl,
       namespace,
       environment,
+      undefined,
       page
     ));
     hasMorePackages = page * size < count;
@@ -344,4 +331,60 @@ export async function exportEnvironment(
   return await fetch(
     `${getServerUrl(baseUrl)}/build/${data.current_build_id}/yaml/`
   );
+}
+
+/**
+ * Search all the installed packages in an environment.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} namespace - Name of the namespace to be searched
+ * @param {string} environment - Name of the environment to be searched
+ * @param {string} searchTerm - Optionally provide a search term to filter the installed packages
+ * @param {number} [size] - Number of results fetched from the conda-store server at a time
+ * @returns {Promise<Array<ICondaStorePackage>>} List of installed packages which match the
+ * searchTerm
+ */
+export async function searchInstalled(baseUrl: string, namespace: string, environment: string, searchTerm: string, size: number = 100): Promise<Array<ICondaStorePackage>> {
+  let count = 0, page = 1;
+  let data;
+  let hasMorePackages = true;
+  let packages: Array<ICondaStorePackage> = [];
+
+  while (hasMorePackages) {
+      ({count, page, data} = await fetchEnvironmentPackages(
+         baseUrl, namespace, environment, searchTerm, page, size
+      ))
+      packages = [...packages, ...data];
+      page += 1;
+      hasMorePackages = page*size < count;
+  }
+  return packages;
+}
+
+/**
+ * Search all the available packages.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} searchTerm - Provide a search term to filter the available packages
+ * @param {number} [size] - [TODO:description]
+ * @returns {Promise<Array<ICondaStorePackage>>} List of available packages which match the
+ * searchTerm
+ */
+export async function searchAvailable(baseUrl: string, searchTerm: string, size: number = 100): Promise<Array<ICondaStorePackage>> {
+  let count = 0, page = 1;
+  let data;
+  let hasMorePackages = true;
+  let packages: Array<ICondaStorePackage> = [];
+
+  while (hasMorePackages) {
+      ({count, page, data} = await fetchPackages(
+         baseUrl, searchTerm, page, size
+      ))
+      packages = [...packages, ...data];
+      page += 1;
+      hasMorePackages = page*size < count;
+  }
+  return packages;
 }

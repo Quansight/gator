@@ -213,6 +213,8 @@ export namespace Conda {
      * Optionally loads more packages, if the result is paginated.
      */
     loadMorePackages?: (environment?: string) => Promise<Array<Conda.IPackage>>;
+
+    searchPackages?: (environment: string, searchTerm: string) => Promise<Array<Conda.IPackage>>;
   }
 
   /**
