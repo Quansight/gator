@@ -534,9 +534,7 @@ export class CondaPkgPanel extends React.Component<
           onPkgClick={this.handleClick}
           onPkgChange={this.handleVersionSelection}
           onPkgGraph={this.handleDependenciesGraph}
-          hasNextPage={Boolean(
-            this._model.hasMorePackages && this._model.hasMorePackages()
-          )}
+          hasNextPage={Boolean(this._model.hasMorePackages)}
           isNextPageLoading={this.state.isLoading}
           loadNextPage={this.loadNextPage.bind(this)}
         />
