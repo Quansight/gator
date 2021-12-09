@@ -209,11 +209,13 @@ export namespace Conda {
      */
     packageChanged: ISignal<IPackageManager, Conda.IPackageChange>;
     /**
-     * Callback triggered when the user scrolls to the bottom of the package list.
      * Optionally loads more packages, if the result is paginated.
      */
     loadMorePackages?: (environment?: string) => Promise<Array<Conda.IPackage>>;
-    hasMorePackages?: () => boolean;
+    /**
+     * Are there any more packages to load via loadMorePackages()?
+     */
+    hasMorePackages?: boolean;
   }
 
   /**

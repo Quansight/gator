@@ -47,7 +47,9 @@ export interface IPkgListProps {
    * Package item graph dependencies handler
    */
   onPkgGraph: (pkg: Conda.IPackage) => void;
-
+  /**
+   * Props for infinite scrolling loader
+   */
   hasNextPage: boolean;
   isNextPageLoading: boolean;
   loadNextPage: (startIndex: number, stopIndex: number) => Promise<void>;
@@ -196,8 +198,11 @@ export class CondaPkgList extends React.Component<IPkgListProps> {
   protected rowRenderer = (props: ListChildComponentProps): JSX.Element => {
     const { data, index, style } = props;
     const pkg = data[index] as Conda.IPackage;
+    const isDataRow = index < data.length;
 
-    if (index === data.length) {
+    // When the row index is one greater than the last index of the data array,
+    // it's time to render a "Loading..." indicator row
+    if (!isDataRow) {
       return (
         <div
           className={
@@ -254,8 +259,9 @@ export class CondaPkgList extends React.Component<IPkgListProps> {
 
   render(): JSX.Element {
     const { hasNextPage, packages } = this.props;
-    const itemCount =
-      packages.length && hasNextPage ? packages.length + 1 : packages.length;
+    // Add 1 to itemCount if there's another page in order to render the
+    // "Loading..." row
+    const itemCount = packages.length + (hasNextPage ? 1 : 0);
     return (
       <div id={CONDA_PACKAGES_PANEL_ID} role="grid">
         <AutoSizer disableHeight>
@@ -306,6 +312,9 @@ export class CondaPkgList extends React.Component<IPkgListProps> {
                 </div>
                 <InfiniteLoader
                   isItemLoaded={index =>
+                    // Every row is loaded except for our loading indicator row.
+                    // (And when there are no more pages, every row is loaded,
+                    // period.)
                     !hasNextPage || index < packages.length
                   }
                   itemCount={itemCount}
@@ -318,7 +327,7 @@ export class CondaPkgList extends React.Component<IPkgListProps> {
                       itemCount={itemCount}
                       itemData={packages}
                       itemKey={(index, data): React.Key =>
-                        data[index] ? data[index].name : 'undefined'
+                        data[index]?.name || 'loading...'
                       }
                       itemSize={40}
                       width={width}

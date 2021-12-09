@@ -453,7 +453,14 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     return this.mergeConvert(installed, available);
   }
 
-  hasMorePackages(): boolean {
+  /**
+   * Boolean getter that when false means that calling loadMorePackages again
+   * should not return more packages. When true, calling loadMorePackages should
+   * fetch more packages.
+   *
+   * @return {boolean}
+   */
+  get hasMorePackages(): boolean {
     return this.hasMoreInstalledPackages || this.hasMoreAvailablePackages;
   }
 

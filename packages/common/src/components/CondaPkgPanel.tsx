@@ -459,6 +459,13 @@ export class CondaPkgPanel extends React.Component<
     }
   }
 
+  /**
+   * If the underlying model supports it, this method lo
+   * ads more packages.
+   *
+   * @async
+   * @return {Promise<void>}
+   */
   async loadNextPage(): Promise<void> {
     if (!this._model.loadMorePackages) {
       return;
