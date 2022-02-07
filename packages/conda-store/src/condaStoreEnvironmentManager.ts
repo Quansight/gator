@@ -606,13 +606,8 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   }
 
   async searchPackages(searchTerm: string): Promise<Array<Conda.IPackage>> {
-    const { namespace, environment } = parseEnvironment(this.environment);
-    const {
-      data
-    }: { data: Array<Conda.IPackage> } = (await fetchEnvironmentPackages(
+    const { data }: { data: Array<Conda.IPackage> } = (await fetchPackages(
       this.baseUrl,
-      namespace,
-      environment,
       undefined,
       undefined,
       searchTerm

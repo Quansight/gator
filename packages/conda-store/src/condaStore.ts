@@ -114,12 +114,14 @@ export async function fetchEnvironments(
 export async function fetchPackages(
   baseUrl: string,
   page = 1,
-  size = 100
+  size = 100,
+  search = ''
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
   const response = await fetch(
     `${getServerUrl(
       baseUrl
-    )}/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name`
+    )}/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name` +
+      (search ? `&search=${search}` : '')
   );
   if (response.ok) {
     return await response.json();
@@ -143,8 +145,7 @@ export async function fetchEnvironmentPackages(
   namespace: string,
   environment: string,
   page = 1,
-  size = 100,
-  search = ''
+  size = 100
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
   if (namespace === undefined || environment === undefined) {
     console.error(
@@ -162,8 +163,7 @@ export async function fetchEnvironmentPackages(
     response = await fetch(
       `${getServerUrl(baseUrl)}/build/${
         data.current_build_id
-      }/packages/?page=${page}&size=${size}&sort_by=name` +
-        (search ? `&search=${search}` : '')
+      }/packages/?page=${page}&size=${size}&sort_by=name`
     );
     if (response.ok) {
       return response.json();
