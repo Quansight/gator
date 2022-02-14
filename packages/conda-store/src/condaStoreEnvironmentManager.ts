@@ -606,13 +606,14 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   }
 
   async searchPackages(searchTerm: string): Promise<Array<Conda.IPackage>> {
-    const { data }: { data: Array<Conda.IPackage> } = (await fetchPackages(
+    const { data } = await fetchPackages(
       this.baseUrl,
       undefined,
       undefined,
       searchTerm
-    )) as { data: any };
-    return data;
+    );
+    const { available } = this.truncate([], data);
+    return this.mergeConvert([], available);
   }
 
   async getDependencies(

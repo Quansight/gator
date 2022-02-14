@@ -49,6 +49,7 @@
     "@babel/preset-env": "^7.0.0",
     "@jupyterlab/testutils": "^3.0.0",
     "@types/jest": "^26.0.0",
+    "@types/lodash.debounce": "^4.0.6",
     "@types/react": "^17.0.0",
     "@types/react-d3-graph": "^2.3.4",
     "@types/react-virtualized-auto-sizer": "^1.0.0",

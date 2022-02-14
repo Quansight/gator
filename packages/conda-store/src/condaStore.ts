@@ -57,9 +57,7 @@ function getServerUrl(serverURL: string): string {
  * @async
  * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
  * @throws {Error} - Thrown if the request fails or the response is not ok.
- * @return {Promise<{
-    status: string
-}>} Status of the conda-store server
+ * @return {Promise<{status: string}>} Status of the conda-store server
  */
 export async function condaStoreServerStatus(baseUrl: string): Promise<{
   status: string;
