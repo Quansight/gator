@@ -393,8 +393,8 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
    * @return {Promise<Array<ICondaStorePackage>>} Array of installed conda-store packages.
    */
   async loadInstalledPackages(
-    environment: string
-  ): Promise<Array<ICondaStorePackage>> {
+    environment?: string
+  ): Promise<Array<Conda.IPackage>> {
     if (this.hasMoreInstalledPackages) {
       const { environment: envName, namespace: namespaceName } =
         parseEnvironment(
@@ -411,9 +411,11 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
         count > this.installedPage * this.installedPageSize;
       this.installedPage += 1;
       this.installedPackages = [...this.installedPackages, ...data];
-      return data;
     }
-    return [];
+    const { installed } = this.truncate(this.installedPackages, []);
+    const packages = this.mergeConvert(installed);
+    console.log('return packages')
+    return packages;
   }
 
   /**
@@ -564,7 +566,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     this.hasMoreInstalledPackages = true;
     this.hasMoreAvailablePackages = true;
 
-    return this.loadMorePackages(environment);
+    return this.loadInstalledPackages(environment);
   }
 
   async refreshAvailablePackages(cancellable?: boolean): Promise<void> {

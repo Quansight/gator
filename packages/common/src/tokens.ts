@@ -212,7 +212,9 @@ export namespace Conda {
      * Callback triggered when the user scrolls to the bottom of the package list.
      * Optionally loads more packages, if the result is paginated.
      */
-    loadMorePackages?: (environment?: string) => Promise<Array<Conda.IPackage>>;
+    loadInstalledPackages?: (
+      environment?: string
+    ) => Promise<Array<Conda.IPackage>>;
   }
 
   /**

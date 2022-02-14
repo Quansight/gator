@@ -103,6 +103,7 @@ export class CondaPkgPanel extends React.Component<
   }
 
   private async _updatePackages(): Promise<void> {
+    console.log('CondaPkgPanel._updatePackages');
     this.setState({
       isLoading: true,
       hasUpdate: false,
@@ -449,12 +450,20 @@ export class CondaPkgPanel extends React.Component<
         console.error('Error when refreshing the available packages.', error);
       }
     }
+    console.log('calling updatePackages from handleRefreshPackages');
     this._updatePackages();
   }
 
   componentDidUpdate(prevProps: IPkgPanelProps): void {
+    console.log(
+      'this._currentEnvironment',
+      this._currentEnvironment,
+      'this.props.packageManager.environment',
+      this.props.packageManager.environment
+    );
     if (this._currentEnvironment !== this.props.packageManager.environment) {
       this._currentEnvironment = this.props.packageManager.environment;
+      console.log('calling updatePackages from componentDidUpdate');
       this._updatePackages();
     }
   }
@@ -472,7 +481,7 @@ export class CondaPkgPanel extends React.Component<
       this.setState({
         isLoading: true
       });
-      const packages = await this._model.loadMorePackages?.();
+      const packages = await this._model.loadInstalledPackages?.();
       if (packages !== undefined) {
         this.setState({ packages });
       }
@@ -528,6 +537,7 @@ export class CondaPkgPanel extends React.Component<
           onApply={this.handleApply}
           onCancel={this.handleCancel}
           onRefreshPackages={this.handleRefreshPackages}
+          filterDisabled={Boolean(this._model.loadInstalledPackages)}
         />
         <CondaPkgList
           height={this.props.height - PACKAGE_TOOLBAR_HEIGHT}
