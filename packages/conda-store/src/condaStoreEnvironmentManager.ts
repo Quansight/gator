@@ -7,11 +7,13 @@ import {
   fetchEnvironmentPackages,
   ICondaStorePackage,
   condaStoreServerStatus,
+  cloneEnvironment,
   createEnvironment,
   specifyEnvironment,
   removePackages,
   exportEnvironment,
-  addPackages
+  addPackages,
+  removeEnvironment
 } from './condaStore';
 
 interface IParsedEnvironment {
@@ -29,12 +31,17 @@ interface IParsedEnvironment {
 function parseEnvironment(environment: string): IParsedEnvironment {
   if (environment !== undefined) {
     const [namespaceName, environmentName] = environment.split('/', 2);
+    if (!environmentName) {
+      throw new Error(
+        'Namespace and environment must be provided together, like so: namespace/environment'
+      );
+    }
     return {
       environment: environmentName,
       namespace: namespaceName
     };
   } else {
-    throw 'Environment is undefined.';
+    throw new Error('Environment is undefined.');
   }
 }
 
@@ -88,13 +95,31 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
     return this._packageManager;
   }
 
-  async clone(target: string, name: string): Promise<void> {
-    return;
+  /**
+   * Clone an existing environment.
+   *
+   * @param {string} existingName - <namespace>/<environment> name for the
+   * existing environment.
+   * @param {string} name - <namespace>/<environment> name for new
+   * environment, which will be a clone of the existing environment.
+   */
+  async clone(existingName: string, name: string): Promise<void> {
+    const { namespace: existingNamespace, environment: existingEnvironment } =
+      parseEnvironment(existingName);
+    const { namespace, environment } = parseEnvironment(name);
+    await cloneEnvironment(
+      this._baseUrl,
+      existingNamespace,
+      existingEnvironment,
+      namespace,
+      environment
+    );
   }
 
   /**
    * Create a new environment.
    *
+   * @async
    * @param {string} name - <namespace>/<environment> name for the new environment.
    * @param {string} [type] - Type of environment to create; see this.environmentTypes for possible
    * values.
@@ -159,7 +184,15 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
     return;
   }
 
+  /**
+   * Remove an environment.
+   *
+   * @async
+   * @param {string} name - <namespace>/<environment> name for environment.
+   */
   async remove(name: string): Promise<void> {
+    const { namespace, environment } = parseEnvironment(name);
+    await removeEnvironment(this._baseUrl, namespace, environment);
     return;
   }
 
@@ -387,12 +420,10 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     environment: string
   ): Promise<Array<ICondaStorePackage>> {
     if (this.hasMoreInstalledPackages) {
-      const {
-        environment: envName,
-        namespace: namespaceName
-      } = parseEnvironment(
-        environment !== undefined ? environment : this.environment
-      );
+      const { environment: envName, namespace: namespaceName } =
+        parseEnvironment(
+          environment !== undefined ? environment : this.environment
+        );
       const { count, data } = await fetchEnvironmentPackages(
         this.baseUrl,
         namespaceName,
@@ -439,15 +470,13 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     if (this.hasMoreAvailablePackages) {
       await this.loadAvailablePackages();
     }
-    const lastAvailable = this.availablePackages[
-      this.availablePackages.length - 1
-    ];
+    const lastAvailable =
+      this.availablePackages[this.availablePackages.length - 1];
 
     // Keep loading installed packages until we have enough to be sure we know whether the last
     // available package has been installed or not.
-    let lastInstalled = this.installedPackages[
-      this.installedPackages.length - 1
-    ];
+    let lastInstalled =
+      this.installedPackages[this.installedPackages.length - 1];
     while (
       this.hasMoreInstalledPackages &&
       (lastInstalled === undefined ||

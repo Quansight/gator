@@ -1,4 +1,10 @@
-import { stringify } from 'yaml';
+/**
+ * @file Client-side functions to call the conda-store REST API.
+ *
+ * Note: fetch is assumed to be global (execution environment: web browser).
+ */
+
+import { parse, stringify } from 'yaml';
 
 export interface ICondaStoreEnvironment {
   name: string;
@@ -35,6 +41,15 @@ interface IPaginatedResult<T> {
   status?: string;
 }
 
+// See class CondaSpecification in conda_store_server/schema.py.
+// https://github.com/Quansight/conda-store/blob/main/conda-store-server/conda_store_server/schema.py#L111
+interface ICondaStoreSpecification {
+  name: string;
+  dependencies: Array<string>;
+  channels?: Array<string>;
+  prefix?: string;
+}
+
 /**
  * Construct the base URL for all endpoints available on the conda-store server.
  *
@@ -55,9 +70,7 @@ function getServerUrl(serverURL: string): string {
     status: string
 }>} Status of the conda-store server
  */
-export async function condaStoreServerStatus(
-  baseUrl: string
-): Promise<{
+export async function condaStoreServerStatus(baseUrl: string): Promise<{
   status: string;
 }> {
   let response;
@@ -266,13 +279,78 @@ export async function createEnvironment(
   environment: string,
   dependencies: Array<string>
 ): Promise<void> {
-  await specifyEnvironment(
+  const specification: ICondaStoreSpecification = {
+    name: environment,
+    dependencies
+  };
+  await specifyEnvironment(baseUrl, namespace, stringify(specification));
+  return;
+}
+
+/**
+ * Clone an existing environment.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} existingNamespace - Namespace of the existing environment.
+ * @param {string} existingEnvironment - Name of the existing environment.
+ * @param {string} namespace - Namespace into which the clone will be created.
+ * @param {string} environment - Name of the new environment, which will be a clone of the existing environment.
+ * @param {Array<string>} dependencies - List of string package names to be added to the spec.
+ * @returns {Promise<void>}
+ */
+export async function cloneEnvironment(
+  baseUrl: string,
+  existingNamespace: string,
+  existingEnvironment: string,
+  namespace: string,
+  environment: string
+): Promise<void> {
+  // Get specification for existing environment
+  const specificationResponse = await exportEnvironment(
+    baseUrl,
+    existingNamespace,
+    existingEnvironment
+  );
+
+  // Modify specification so that it uses the provided environment name
+  const specificationYaml = await specificationResponse.text();
+  const specification: ICondaStoreSpecification = parse(specificationYaml);
+  specification.name = environment;
+
+  // Pass specification to the API to create new environment based on the
+  // provided existiing environment
+  const response = await specifyEnvironment(
     baseUrl,
     namespace,
-    stringify({
-      name: environment,
-      dependencies
-    })
+    stringify(specification)
+  );
+  if (!response.ok) {
+    console.error(await response.json());
+    throw new Error('Could not clone environment, see browser console.');
+  }
+  return;
+}
+
+/**
+ * Remove an environment.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} namespace - Namespace the environment belongs to.
+ * @param {string} environment - Name of the environment.
+ * @returns {Promise<void>}
+ */
+export async function removeEnvironment(
+  baseUrl: string,
+  namespace: string,
+  environment: string
+): Promise<void> {
+  await fetch(
+    `${getServerUrl(baseUrl)}/environment/${namespace}/${environment}/`,
+    {
+      method: 'DELETE'
+    }
   );
   return;
 }
