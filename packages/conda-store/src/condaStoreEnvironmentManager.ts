@@ -10,7 +10,6 @@ import {
   cloneEnvironment,
   createEnvironment,
   specifyEnvironment,
-  installPackages,
   removePackages,
   exportEnvironment,
   addPackages,
