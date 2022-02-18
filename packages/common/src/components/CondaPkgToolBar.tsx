@@ -28,9 +28,9 @@ export interface ICondaPkgToolBarProps {
    */
   category: PkgFilters;
   /**
-   * Are there some package modifications?
+   * Number of package modifications the user has queued
    */
-  hasSelection: boolean;
+  selectionCount: number;
   /**
    * Are there some packages updatable?
    */
@@ -63,10 +63,13 @@ export interface ICondaPkgToolBarProps {
    * Refresh available packages handler
    */
   onRefreshPackages: () => void;
-  filterDisabled?: boolean;
+  filterDisabled: boolean;
+  searchPlaceholder: string;
+  onToggleSelected: () => void;
 }
 
 export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
+  const hasSelection = props.selectionCount > 0;
   return (
     <div className={`lm-Widget ${CONDA_PACKAGES_TOOLBAR_CLASS} jp-Toolbar`}>
       {!props.filterDisabled && (
@@ -89,12 +92,29 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
           <InputGroup
             className={Style.SearchInput}
             type="text"
-            placeholder="Search Packages"
+            placeholder={props.searchPlaceholder || 'Search Packages'}
             onChange={props.onSearch}
             value={props.searchTerm}
             rightIcon="search"
           />
         </div>
+        {props.filterDisabled && hasSelection && (
+          <button
+            className="jp-NbConda-linklike-button"
+            type="button"
+            onClick={props.onToggleSelected}
+          >
+            {props.category !== PkgFilters.Selected ? (
+              <>
+                You've selected {props.selectionCount}{' '}
+                {props.selectionCount === 1 ? 'package' : 'packages'} for
+                modification
+              </>
+            ) : (
+              <>Show installed packages</>
+            )}
+          </button>
+        )}
       </div>
       <div className="lm-Widget jp-Toolbar-spacer jp-Toolbar-item" />
       <Button
@@ -115,7 +135,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
       </Button>
       <Button
         className="jp-ToolbarButtonComponent"
-        disabled={!props.hasSelection}
+        disabled={!hasSelection}
         minimal
         onMouseDown={props.onApply}
         title="Apply package modifications"
@@ -123,7 +143,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
         <FontAwesomeIcon
           icon={faCartArrowDown}
           style={{
-            color: props.hasSelection
+            color: hasSelection
               ? 'var(--jp-brand-color0)'
               : 'var(--jp-inverse-layout-color3)'
           }}
@@ -131,7 +151,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
       </Button>
       <Button
         className="jp-ToolbarButtonComponent"
-        disabled={!props.hasSelection}
+        disabled={!hasSelection}
         minimal
         onMouseDown={props.onCancel}
         title="Clear package modifications"

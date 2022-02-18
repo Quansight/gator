@@ -105,7 +105,7 @@ async function activateCondaStoreEnv(
         });
         condaWidget.addClass(CONDA_WIDGET_CLASS);
         condaWidget.id = pluginNamespace;
-        condaWidget.title.label = 'Packages';
+        condaWidget.title.label = 'Conda Store';
         condaWidget.title.caption = 'Conda Store Packages Manager';
         condaWidget.title.icon = condaIcon;
         model.getServerStatus().catch((error: any) => {

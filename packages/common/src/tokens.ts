@@ -225,6 +225,7 @@ export namespace Conda {
     loadInstalledPackages?: (
       environment?: string
     ) => Promise<Array<Conda.IPackage>>;
+    searchLabel?: string;
   }
 
   /**

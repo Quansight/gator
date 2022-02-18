@@ -215,7 +215,12 @@ export class CondaPkgPanel extends React.Component<
 
     this.setState({
       packages: this.state.packages,
-      selected: selection
+      selected: selection,
+      activeFilter:
+        selection.length === 0 &&
+        this.state.activeFilter === PkgFilters.Selected
+          ? PkgFilters.All
+          : this.state.activeFilter
     });
   }
 
@@ -511,6 +516,9 @@ export class CondaPkgPanel extends React.Component<
       ? this.state.searchMatchPackages
       : this.state.packages;
 
+    // console.log('packages before filter', packages);
+    // console.log('this.state.selected', this.state.selected);
+
     let filteredPkgs: Conda.IPackage[] = [];
     if (this.state.activeFilter === PkgFilters.All) {
       filteredPkgs = packages;
@@ -521,9 +529,7 @@ export class CondaPkgPanel extends React.Component<
     } else if (this.state.activeFilter === PkgFilters.Updatable) {
       filteredPkgs = packages.filter(pkg => pkg.updatable);
     } else if (this.state.activeFilter === PkgFilters.Selected) {
-      filteredPkgs = packages.filter(
-        pkg => this.state.selected.indexOf(pkg) >= 0
-      );
+      filteredPkgs = this.state.selected;
     }
 
     return (
@@ -531,7 +537,7 @@ export class CondaPkgPanel extends React.Component<
         <CondaPkgToolBar
           isPending={this.state.isLoading}
           category={this.state.activeFilter}
-          hasSelection={this.state.selected.length > 0}
+          selectionCount={this.state.selected.length}
           hasUpdate={this.state.hasUpdate}
           searchTerm={this.state.searchTerm}
           onCategoryChanged={this.handleCategoryChanged}
@@ -541,6 +547,20 @@ export class CondaPkgPanel extends React.Component<
           onCancel={this.handleCancel}
           onRefreshPackages={this.handleRefreshPackages}
           filterDisabled={Boolean(this._model.loadInstalledPackages)}
+          searchPlaceholder={this._model.searchLabel}
+          onToggleSelected={() => {
+            // console.log(
+            //   'setting state, searchTerm: ""',
+            //   this.state.activeFilter
+            // );
+            this.setState({
+              searchTerm: '',
+              activeFilter:
+                this.state.activeFilter === PkgFilters.Selected
+                  ? PkgFilters.All
+                  : PkgFilters.Selected
+            });
+          }}
         />
         <CondaPkgList
           height={this.props.height - PACKAGE_TOOLBAR_HEIGHT}

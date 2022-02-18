@@ -282,6 +282,40 @@ export async function removeEnvironment(
   return;
 }
 
+export async function installPackages(
+  baseUrl: string,
+  namespace: string,
+  environment: string,
+  packages: Array<string>
+): Promise<void> {
+  // Fetch all the packages from the current environment
+  let page = 1;
+  let count, data, size;
+  let hasMorePackages = true;
+  let installed: Array<ICondaStorePackage> = [];
+
+  while (hasMorePackages) {
+    ({ count, data, page, size } = await fetchEnvironmentPackages(
+      baseUrl,
+      namespace,
+      environment,
+      page
+    ));
+    hasMorePackages = page * size < count;
+    installed = [...installed, ...data];
+  }
+
+  const toInstall = new Set(packages);
+  const dependencies = installed
+    .map(({ name, version }) => `${name}=${version}`)
+    .concat(Array.from(toInstall));
+
+  console.log(dependencies)
+
+  await createEnvironment(baseUrl, namespace, environment, dependencies);
+  return;
+}
+
 /**
  * Remove one or more packages from an environment.
  *

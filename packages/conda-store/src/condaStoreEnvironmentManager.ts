@@ -9,6 +9,7 @@ import {
   condaStoreServerStatus,
   createEnvironment,
   specifyEnvironment,
+  installPackages,
   removePackages,
   exportEnvironment,
   removeEnvironment
@@ -211,6 +212,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   availablePageSize = 100;
   availablePackages: Array<ICondaStorePackage> = [];
   baseUrl = '';
+  searchLabel = 'Search more packages';
 
   constructor(environment?: string) {
     this.environment = environment;
@@ -414,7 +416,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     }
     const { installed } = this.truncate(this.installedPackages, []);
     const packages = this.mergeConvert(installed);
-    console.log('return packages')
+    console.log('return packages from loadInstalledPackages')
     return packages;
   }
 
@@ -578,7 +580,8 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   }
 
   async install(packages: Array<string>, environment?: string): Promise<void> {
-    return Promise.resolve(void 0);
+    const { namespace, environment: envName } = parseEnvironment(environment);
+    await installPackages(this.baseUrl, namespace, envName, packages);
   }
 
   async develop(path: string, environment?: string): Promise<void> {
