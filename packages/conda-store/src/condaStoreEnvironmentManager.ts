@@ -7,11 +7,13 @@ import {
   fetchEnvironmentPackages,
   ICondaStorePackage,
   condaStoreServerStatus,
+  cloneEnvironment,
   createEnvironment,
   specifyEnvironment,
   installPackages,
   removePackages,
   exportEnvironment,
+  addPackages,
   removeEnvironment
 } from './condaStore';
 
@@ -30,12 +32,17 @@ interface IParsedEnvironment {
 function parseEnvironment(environment: string): IParsedEnvironment {
   if (environment !== undefined) {
     const [namespaceName, environmentName] = environment.split('/', 2);
+    if (!environmentName) {
+      throw new Error(
+        'Namespace and environment must be provided together, like so: namespace/environment'
+      );
+    }
     return {
       environment: environmentName,
       namespace: namespaceName
     };
   } else {
-    throw 'Environment is undefined.';
+    throw new Error('Environment is undefined.');
   }
 }
 
@@ -89,8 +96,25 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
     return this._packageManager;
   }
 
-  async clone(target: string, name: string): Promise<void> {
-    return;
+  /**
+   * Clone an existing environment.
+   *
+   * @param {string} existingName - <namespace>/<environment> name for the
+   * existing environment.
+   * @param {string} name - <namespace>/<environment> name for new
+   * environment, which will be a clone of the existing environment.
+   */
+  async clone(existingName: string, name: string): Promise<void> {
+    const { namespace: existingNamespace, environment: existingEnvironment } =
+      parseEnvironment(existingName);
+    const { namespace, environment } = parseEnvironment(name);
+    await cloneEnvironment(
+      this._baseUrl,
+      existingNamespace,
+      existingEnvironment,
+      namespace,
+      environment
+    );
   }
 
   /**
@@ -579,9 +603,20 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     return true;
   }
 
+  /**
+   * Add packages to an environment.
+   *
+   * @async
+   * @param {Array<string>} packages - Packages to add.
+   * @param {string} [environment] - Environment for which packages are to be added.
+   * @returns {Promise<void>}
+   */
   async install(packages: Array<string>, environment?: string): Promise<void> {
-    const { namespace, environment: envName } = parseEnvironment(environment);
-    await installPackages(this.baseUrl, namespace, envName, packages);
+    const { namespace, environment: environmentName } = parseEnvironment(
+      environment === undefined ? this.environment : environment
+    );
+    await addPackages(this.baseUrl, namespace, environmentName, packages);
+    return;
   }
 
   async develop(path: string, environment?: string): Promise<void> {

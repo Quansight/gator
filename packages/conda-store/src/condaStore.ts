@@ -4,7 +4,8 @@
  * Note: fetch is assumed to be global (execution environment: web browser).
  */
 
-import { stringify } from 'yaml';
+import { parse, stringify } from 'yaml';
+import { URLExt } from '@jupyterlab/coreutils';
 
 export interface ICondaStoreEnvironment {
   name: string;
@@ -41,14 +42,31 @@ interface IPaginatedResult<T> {
   status?: string;
 }
 
+// See class CondaSpecification in conda_store_server/schema.py.
+// https://github.com/Quansight/conda-store/blob/main/conda-store-server/conda_store_server/schema.py#L111
+interface ICondaStoreSpecification {
+  name: string;
+  dependencies: Array<string>;
+  channels?: Array<string>;
+  prefix?: string;
+}
+
 /**
  * Construct the base URL for all endpoints available on the conda-store server.
  *
- * @param {string} serverURL - URL of the conda-store server; usually http://localhost:5000
- * @returns {string} Formatted base URL for all conda-store server endpoints
+ * @param {string} serverURL - URL of the conda-store server; usually
+ * 'http://localhost:5000'
+ * @param {string} restEndpoint - Pathname plus query string without the
+ * api/version prefix. Example: '/environment/?page=1&size=100'
+ * @returns {string} Formatted base URL for all conda-store server endpoints.
+ * Examples:
+ * - URLExt.join('http://localhost:5000', '/') =>
+ *   'http://localhost:5000/api/v1/'
+ * - URLExt.join('http://localhost:5000', 'package/?search=python') =>
+ *   'http://localhost:5000/api/v1/package/?search=python'
  */
-function getServerUrl(serverURL: string): string {
-  return `${serverURL}/api/v1`;
+function createApiUrl(serverURL: string, restEndpoint: string): string {
+  return URLExt.join(serverURL, 'api', 'v1', restEndpoint);
 }
 
 /**
@@ -63,12 +81,11 @@ export async function condaStoreServerStatus(baseUrl: string): Promise<{
   status: string;
 }> {
   let response;
+  const url = createApiUrl(baseUrl, '/');
   try {
-    response = await fetch(`${getServerUrl(baseUrl)}`);
+    response = await fetch(url);
   } catch {
-    throw new Error(
-      `Failed to reach the conda-store server at ${getServerUrl(baseUrl)}`
-    );
+    throw new Error(`Failed to reach the conda-store server at ${url}`);
   }
   if (response.ok) {
     return await response.json();
@@ -91,13 +108,33 @@ export async function fetchEnvironments(
   page = 1,
   size = 100
 ): Promise<IPaginatedResult<ICondaStoreEnvironment>> {
-  const response = await fetch(
-    `${getServerUrl(baseUrl)}/environment/?page=${page}&size=${size}`
-  );
+  const url = createApiUrl(baseUrl, `/environment/?page=${page}&size=${size}`);
+  const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   } else {
     return {};
+  }
+}
+
+/**
+ * Search all packages (both installed and not installed) for a package.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} term - Search term; both name and descriptions are searched
+ * @return {Promise<Array<ICondaStorePackage>>} Packages matching the search term.
+ */
+export async function searchPackages(
+  baseUrl: string,
+  term: string
+): Promise<Array<ICondaStorePackage>> {
+  const url = createApiUrl(baseUrl, `/package/?search=${term}`);
+  const response = await fetch(url);
+  if (response.ok) {
+    return await response.json();
+  } else {
+    return [];
   }
 }
 
@@ -115,12 +152,12 @@ export async function fetchPackages(
   size = 100,
   search = ''
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
-  const response = await fetch(
-    `${getServerUrl(
-      baseUrl
-    )}/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name` +
+  const url = createApiUrl(
+    baseUrl,
+    `/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name` +
       (search ? `&search=${search}` : '')
   );
+  const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   } else {
@@ -152,17 +189,19 @@ export async function fetchEnvironmentPackages(
     return {};
   }
 
-  let response = await fetch(
-    `${getServerUrl(baseUrl)}/environment/${namespace}/${environment}/`
+  const environmentInfoUrl = createApiUrl(
+    baseUrl,
+    `/environment/${namespace}/${environment}/`
   );
+  const environmentInfoResponse = await fetch(environmentInfoUrl);
 
-  if (response.ok) {
-    const { data } = await response.json();
-    response = await fetch(
-      `${getServerUrl(baseUrl)}/build/${
-        data.current_build_id
-      }/packages/?page=${page}&size=${size}&sort_by=name`
+  if (environmentInfoResponse.ok) {
+    const { data } = await environmentInfoResponse.json();
+    const url = createApiUrl(
+      baseUrl,
+      `/build/${data.current_build_id}/packages/?page=${page}&size=${size}&sort_by=name`
     );
+    const response = await fetch(url);
     if (response.ok) {
       return response.json();
     }
@@ -183,7 +222,8 @@ export async function fetchBuildPackages(
   baseUrl: string,
   build_id: number
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
-  const response = await fetch(`${getServerUrl(baseUrl)}/build/${build_id}/`);
+  const url = createApiUrl(baseUrl, `/build/${build_id}/`);
+  const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   }
@@ -201,7 +241,8 @@ export async function fetchBuildPackages(
 export async function fetchChannels(
   baseUrl: string
 ): Promise<Array<ICondaStoreChannel>> {
-  const response = await fetch(`${getServerUrl(baseUrl)}/channel/`);
+  const url = createApiUrl(baseUrl, '/channel/');
+  const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   }
@@ -222,7 +263,8 @@ export async function specifyEnvironment(
   namespace: string,
   specification: string
 ): Promise<Response> {
-  return await fetch(`${getServerUrl(baseUrl)}/specification/`, {
+  const url = createApiUrl(baseUrl, '/specification/');
+  return await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -248,14 +290,56 @@ export async function createEnvironment(
   environment: string,
   dependencies: Array<string>
 ): Promise<void> {
-  await specifyEnvironment(
+  const specification: ICondaStoreSpecification = {
+    name: environment,
+    dependencies
+  };
+  await specifyEnvironment(baseUrl, namespace, stringify(specification));
+  return;
+}
+
+/**
+ * Clone an existing environment.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} existingNamespace - Namespace of the existing environment.
+ * @param {string} existingEnvironment - Name of the existing environment.
+ * @param {string} namespace - Namespace into which the clone will be created.
+ * @param {string} environment - Name of the new environment, which will be a clone of the existing environment.
+ * @param {Array<string>} dependencies - List of string package names to be added to the spec.
+ * @returns {Promise<void>}
+ */
+export async function cloneEnvironment(
+  baseUrl: string,
+  existingNamespace: string,
+  existingEnvironment: string,
+  namespace: string,
+  environment: string
+): Promise<void> {
+  // Get specification for existing environment
+  const specificationResponse = await exportEnvironment(
+    baseUrl,
+    existingNamespace,
+    existingEnvironment
+  );
+
+  // Modify specification so that it uses the provided environment name
+  const specificationYaml = await specificationResponse.text();
+  const specification: ICondaStoreSpecification = parse(specificationYaml);
+  specification.name = environment;
+
+  // Pass specification to the API to create new environment based on the
+  // provided existiing environment
+  const response = await specifyEnvironment(
     baseUrl,
     namespace,
-    stringify({
-      name: environment,
-      dependencies
-    })
+    stringify(specification)
   );
+  if (!response.ok) {
+    console.error(await response.json());
+    throw new Error('Could not clone environment, see browser console.');
+  }
   return;
 }
 
@@ -273,12 +357,13 @@ export async function removeEnvironment(
   namespace: string,
   environment: string
 ): Promise<void> {
-  await fetch(
-    `${getServerUrl(baseUrl)}/environment/${namespace}/${environment}/`,
-    {
-      method: 'DELETE'
-    }
+  const url = createApiUrl(
+    baseUrl,
+    `/environment/${namespace}/${environment}/`
   );
+  await fetch(url, {
+    method: 'DELETE'
+  });
   return;
 }
 
@@ -310,7 +395,7 @@ export async function installPackages(
     .map(({ name, version }) => `${name}=${version}`)
     .concat(Array.from(toInstall));
 
-  console.log(dependencies)
+  console.log(dependencies);
 
   await createEnvironment(baseUrl, namespace, environment, dependencies);
   return;
@@ -375,12 +460,61 @@ export async function exportEnvironment(
   environment: string
 ): Promise<Response> {
   // First get the build ID of the requested environment
-  const response = await fetch(
-    `${getServerUrl(baseUrl)}/environment/${namespace}/${environment}/`
+  const enviornmentInfoUrl = createApiUrl(
+    baseUrl,
+    `/environment/${namespace}/${environment}/`
   );
+  const environmentInfoResponse = await fetch(enviornmentInfoUrl);
 
-  const { data } = await response.json();
-  return await fetch(
-    `${getServerUrl(baseUrl)}/build/${data.current_build_id}/yaml/`
-  );
+  const { data } = await environmentInfoResponse.json();
+  const url = createApiUrl(baseUrl, `/build/${data.current_build_id}/yaml/`);
+  return await fetch(url);
+}
+
+/**
+ * Add packages to an environment.
+ *
+ * If a package already exists in the environment, no change will be made to that package.
+ *
+ * @async
+ * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
+ * @param {string} namespace - Namespace into which the environment resides.
+ * @param {string} environment - Name of the environment.
+ * @param {Array<string>} packages - List of packages to add to the environment.
+ * @returns {Promise<void>}
+ */
+export async function addPackages(
+  baseUrl: string,
+  namespace: string,
+  environment: string,
+  packages: Array<string>
+): Promise<void> {
+  // Fetch all the packages from the current environment
+  let page = 1;
+  let count, data, size;
+  let hasMorePackages = true;
+  let installed: Array<ICondaStorePackage> = [];
+
+  while (hasMorePackages) {
+    ({ count, data, page, size } = await fetchEnvironmentPackages(
+      baseUrl,
+      namespace,
+      environment,
+      page
+    ));
+    hasMorePackages = page * size < count;
+    installed = [...installed, ...data];
+  }
+
+  // Generate a specification for the new environment including the installed as well as new packages
+  const toAdd = new Set(packages);
+  let dependencies: Array<string> = [];
+  installed.forEach(({ name, version }) => {
+    // Don't add any package that is already installed
+    toAdd.delete(name);
+    dependencies.push(`${name}=${version}`);
+  });
+  dependencies = [...dependencies, ...toAdd];
+
+  await createEnvironment(baseUrl, namespace, environment, dependencies);
 }
