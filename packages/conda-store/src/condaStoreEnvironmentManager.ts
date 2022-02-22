@@ -1,3 +1,4 @@
+import semverCompare from 'semver-compare';
 import { ISettingRegistry } from '@jupyterlab/settingregistry';
 import { ISignal, Signal } from '@lumino/signaling';
 import { Conda, IEnvironmentManager } from '@mamba-org/gator-common';
@@ -284,7 +285,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     const versions = [
       ...installed.map(pkg => pkg.version),
       ...available.map(pkg => pkg.version)
-    ];
+    ].sort(semverCompare);
     const build_number = [
       ...installed.map(_pkg => -1),
       ...available.map(_pkg => -1)
