@@ -74,6 +74,7 @@ export interface IPkgPanelState {
    * Current search term
    */
   searchTerm: string;
+  isLoadingSearch: boolean;
 }
 
 /** Top level React component for widget */
@@ -89,6 +90,7 @@ export class CondaPkgPanel extends React.Component<
       hasDescription: false,
       hasUpdate: false,
       packages: [],
+      isLoadingSearch: false,
       searchMatchPackages: [],
       selected: [],
       searchTerm: '',
@@ -260,13 +262,13 @@ export class CondaPkgPanel extends React.Component<
     const searchTerm = (event.target as HTMLInputElement).value;
     // need to call setState for searchTerm before waiting for promise
     // to resolve so the UI can update without delay
-    this.setState({ searchTerm, isLoading: true });
+    this.setState({ searchTerm, isLoadingSearch: true });
 
     this.searchOnceUserHasStoppedTyping(searchTerm);
   }
   searchOnceUserHasStoppedTyping = debounce(async (searchTerm: string) => {
     const searchMatchPackages = await this._model.searchPackages(searchTerm);
-    this.setState({ searchMatchPackages, isLoading: false });
+    this.setState({ searchMatchPackages, isLoadingSearch: false });
   }, 1000);
 
   async handleUpdateAll(): Promise<void> {
@@ -519,10 +521,14 @@ export class CondaPkgPanel extends React.Component<
 
   render(): JSX.Element {
     // note: search results may be empty
-    const hasSearchResults = this.state.searchTerm && !this.state.isLoading;
-    const packages = hasSearchResults
-      ? this.state.searchMatchPackages
-      : this.state.packages;
+    let packages: Conda.IPackage[];
+    if (!this.state.searchTerm) {
+      packages = this.state.packages;
+    } else if (this.state.isLoadingSearch) {
+      packages = [];
+    } else {
+      packages = this.state.searchMatchPackages;
+    }
 
     let filteredPkgs = this.combinePackagesSelected(
       packages,
@@ -541,7 +547,7 @@ export class CondaPkgPanel extends React.Component<
     return (
       <div className={Style.Panel}>
         <CondaPkgToolBar
-          isPending={this.state.isLoading}
+          isPending={this.state.isLoading || this.state.isLoadingSearch}
           category={this.state.activeFilter}
           selectionCount={this.state.selected.length}
           hasUpdate={this.state.hasUpdate}
