@@ -262,7 +262,11 @@ export class CondaPkgPanel extends React.Component<
     const searchTerm = (event.target as HTMLInputElement).value;
     // need to call setState for searchTerm before waiting for promise
     // to resolve so the UI can update without delay
-    this.setState({ searchTerm, isLoadingSearch: true });
+    this.setState({
+      searchTerm,
+      isLoadingSearch: true,
+      activeFilter: PkgFilters.All
+    });
 
     this.searchOnceUserHasStoppedTyping(searchTerm);
   }
@@ -509,6 +513,7 @@ export class CondaPkgPanel extends React.Component<
       this.setState({
         isLoading: true
       });
+      console.log('onPkgBottomHit, loading installed packages');
       const packages = await this._model.loadInstalledPackages?.();
       if (packages !== undefined) {
         this.setState({ packages });
@@ -540,7 +545,9 @@ export class CondaPkgPanel extends React.Component<
       filteredPkgs = filteredPkgs.filter(pkg => !pkg.version_installed);
     } else if (this.state.activeFilter === PkgFilters.Updatable) {
       filteredPkgs = filteredPkgs.filter(pkg => pkg.updatable);
-    } else if (this.state.activeFilter === PkgFilters.Selected) {
+    } else if (
+      this.state.activeFilter === PkgFilters.Selected
+    ) {
       filteredPkgs = this.state.selected;
     }
 

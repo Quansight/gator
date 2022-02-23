@@ -5,7 +5,7 @@ import { Conda, IEnvironmentManager } from '@mamba-org/gator-common';
 import {
   fetchEnvironments,
   fetchPackages,
-  fetchEnvironmentPackages,
+  fetchSpecifiedPackages,
   ICondaStorePackage,
   condaStoreServerStatus,
   cloneEnvironment,
@@ -14,7 +14,9 @@ import {
   removePackages,
   exportEnvironment,
   addPackages,
-  removeEnvironment
+  removeEnvironment,
+  getAllPackagesMatchingSearch,
+  fetchEnvironmentPackages
 } from './condaStore';
 
 interface IParsedEnvironment {
@@ -52,6 +54,7 @@ function parseEnvironment(environment: string): IParsedEnvironment {
  */
 export class CondaStoreEnvironmentManager implements IEnvironmentManager {
   constructor(settings?: ISettingRegistry.ISettings) {
+    console.log('constructor CondaStoreEnvironmentManager');
     if (settings) {
       this.updateSettings(settings);
       settings.changed.connect(this.updateSettings, this);
@@ -295,19 +298,9 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       ...available.map(({ build }) => build)
     ];
 
-    let name,
-      channel_id,
-      summary,
-      version_installed,
-      version_selected,
-      updatable;
+    let name, channel, summary, version_installed, version_selected, updatable;
     if (installed.length > 0) {
-      ({
-        name,
-        channel_id,
-        summary,
-        version: version_installed
-      } = installed[0]);
+      ({ name, channel, summary, version: version_installed } = installed[0]);
       version_selected = version_installed;
 
       if (available.length > 0) {
@@ -318,7 +311,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
           ) === -1;
       }
     } else {
-      ({ name, channel_id, summary } = available[0]);
+      ({ name, channel, summary } = available[available.length - 1]);
       version_installed = undefined;
       version_selected = 'none';
     }
@@ -328,7 +321,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       version: versions,
       build_number,
       build_string,
-      channel: `${channel_id}`,
+      channel: channel.name,
       platform: '',
       summary,
       home: '',
@@ -418,7 +411,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
    * if none is provided, the current environment is used.
    * @return {Promise<Array<ICondaStorePackage>>} Array of installed conda-store packages.
    */
-  async loadInstalledPackages(
+  async _loadInstalledPackages(
     environment?: string
   ): Promise<Array<Conda.IPackage>> {
     if (this.hasMoreInstalledPackages) {
@@ -440,7 +433,82 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     }
     const { installed } = this.truncate(this.installedPackages, []);
     const packages = this.mergeConvert(installed);
-    console.log('return packages from loadInstalledPackages')
+    console.log('return packages from loadInstalledPackages');
+    return packages;
+  }
+
+  /**
+   * Load the next page of installed packages.
+   *
+   * @async
+   * @param {string} environment - Environment for which the installed packages are to be fetched;
+   * if none is provided, the current environment is used.
+   * @return {Promise<Array<ICondaStorePackage>>} Array of installed conda-store packages.
+   */
+  async loadInstalledPackages(
+    environment?: string
+  ): Promise<Array<Conda.IPackage>> {
+    if (!this.hasMoreInstalledPackages) {
+      return;
+    }
+    const { environment: envName, namespace: namespaceName } = parseEnvironment(
+      environment !== undefined ? environment : this.environment
+    );
+
+    if (!environment) {
+      return [];
+    }
+
+    // spec(ified) dep(endencie)s are packages that were installed explicitly
+    // by the user, as opposed to packages that were installed because they
+    // were dependencies of the user's request packages
+    const specDeps = await fetchSpecifiedPackages(
+      this.baseUrl,
+      namespaceName,
+      envName
+    );
+
+    console.log('specDeps', specDeps);
+
+    // To get all available versions of the specified dependencies
+    // we need to search the server for each dependency
+    let allAvailableVersions: Array<ICondaStorePackage> = [];
+    const specPackageNames: string[] = [];
+    for (const dep of specDeps) {
+      const [name] = dep.split('=');
+      specPackageNames.push(name);
+      const nameMatches = await getAllPackagesMatchingSearch(
+        this.baseUrl,
+        name
+      );
+      const nameEquals = nameMatches.filter(pkg => pkg.name === name);
+      allAvailableVersions = [...allAvailableVersions, ...nameEquals];
+    }
+
+    console.log('allAvailableVersions', allAvailableVersions);
+
+    // To get the version that was actually installed (as distinct from the
+    // version specified/request) we ask for all of the packages in the
+    // current build for the current environment
+    const { data: installedPackages } = await fetchEnvironmentPackages(
+      this.baseUrl,
+      namespaceName,
+      envName,
+      this.installedPage,
+      this.installedPageSize
+    );
+    this.installedPackages = installedPackages;
+
+    console.log('installedPackages', installedPackages);
+
+    const installedVersions = installedPackages.filter(
+      pkg => specPackageNames.indexOf(pkg.name) !== -1
+    );
+
+    // this.installedPackages = installedVersions;
+    const packages = this.mergeConvert(installedVersions, allAvailableVersions);
+    console.log('return packages from loadInstalledPackages');
+    this.hasMoreInstalledPackages = false;
     return packages;
   }
 
@@ -580,6 +648,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   ): Promise<Array<Conda.IPackage>> {
     if (environment === undefined) {
       if (this.environment === undefined) {
+        console.log('in refresh, environment undefined, returning empty array');
         return [];
       }
       environment = this.environment;
@@ -650,8 +719,18 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       undefined,
       searchTerm
     );
-    const { available } = this.truncate([], data);
-    return this.mergeConvert([], available);
+    const searchResultSet = new Set(data.map(pkg => pkg.name));
+    console.log(
+      'searchResultSet',
+      searchResultSet,
+      'this.installedPackages',
+      this.installedPackages
+    );
+    const installedAndSearched = this.installedPackages.filter(pkg =>
+      searchResultSet.has(pkg.name)
+    );
+    console.log('installedAndSearched', installedAndSearched);
+    return this.mergeConvert(installedAndSearched, data);
   }
 
   async getDependencies(

@@ -246,6 +246,13 @@ class CondaPkgView extends React.Component<IPkgListProps> {
   protected rowRenderer = (props: ListChildComponentProps): JSX.Element => {
     const { data, index, style } = props;
     const pkg = data[index] as Conda.IPackage;
+    let channelName = pkg.channel;
+    let channelUrl = '';
+    const channelUrlParts = pkg.channel.split('/');
+    if (channelUrlParts.length) {
+      channelUrl = pkg.channel;
+      channelName = channelUrlParts.slice(-1)[0];
+    }
     return (
       <div
         className={this.rowClassName(index, pkg)}
@@ -280,9 +287,15 @@ class CondaPkgView extends React.Component<IPkgListProps> {
         <div
           className={classes(Style.Cell, Style.ChannelSize)}
           role="gridcell"
-          title={pkg.channel}
+          title={channelName}
         >
-          {pkg.channel}
+          {channelUrl ? (
+            <a href={channelUrl} target="_blank" rel="noreferrer">
+              {channelName}
+            </a>
+          ) : (
+            channelName
+          )}
         </div>
       </div>
     );
@@ -342,7 +355,9 @@ class CondaPkgView extends React.Component<IPkgListProps> {
                   overscanCount={3}
                   itemCount={this.props.packages.length}
                   itemData={this.props.packages}
-                  itemKey={(index, data): React.Key => data[index].name + String(index)}
+                  itemKey={(index, data): React.Key =>
+                    data[index].name + String(index)
+                  }
                   itemSize={40}
                   width={width}
                 >

@@ -20,7 +20,10 @@ export interface ICondaStoreEnvironment {
 export interface ICondaStorePackage {
   name: string;
   version: string;
-  channel_id: number;
+  channel: {
+    id: number;
+    name: string;
+  };
   id: number;
   license: string;
   sha256: string;
@@ -128,14 +131,44 @@ export async function fetchEnvironments(
 export async function searchPackages(
   baseUrl: string,
   term: string
-): Promise<Array<ICondaStorePackage>> {
+): Promise<IPaginatedResult<ICondaStorePackage>> {
   const url = createApiUrl(baseUrl, `/package/?search=${term}`);
   const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   } else {
-    return [];
+    return {};
   }
+}
+
+export async function getAllPackagesMatchingSearch(
+  baseUrl: string,
+  term: string
+): Promise<Array<ICondaStorePackage>> {
+  let matches: Array<ICondaStorePackage> = [];
+  let count = 0;
+  let page = 0;
+  let size = 100;
+  let data: Array<ICondaStorePackage>;
+  let hasMorePackages = true;
+
+  while (hasMorePackages) {
+    console.log(
+      `fetch page ${page} of ${
+        count / size
+      } pages for search term ${term} with baseUrl ${baseUrl}`
+    );
+    ({ count, data, page, size } = await fetchPackages(
+      baseUrl,
+      page + 1,
+      size,
+      term
+    ));
+    hasMorePackages = page * size < count;
+    matches = [...matches, ...data];
+  }
+
+  return matches;
 }
 
 /**
@@ -165,6 +198,34 @@ export async function fetchPackages(
   }
 }
 
+async function fetchCurrentBuild(
+  baseUrl: string,
+  buildId: number
+): Promise<any> {
+  const url = createApiUrl(baseUrl, `/build/${buildId}/`);
+  const response = await fetch(url);
+  if (response.ok) {
+    const json = await response.json();
+    return json.data;
+  }
+}
+
+async function fetchCurrentBuildId(
+  baseUrl: string,
+  namespace: string,
+  environment: string
+): Promise<number | void> {
+  const url = createApiUrl(
+    baseUrl,
+    `/environment/${namespace}/${environment}/`
+  );
+  const response = await fetch(url);
+  if (response.ok) {
+    const json = await response.json();
+    return json.data.current_build_id;
+  }
+}
+
 /**
  * List the installed packages for the given environment and namespace.
  *
@@ -189,17 +250,16 @@ export async function fetchEnvironmentPackages(
     return {};
   }
 
-  const environmentInfoUrl = createApiUrl(
+  const currentBuildId = await fetchCurrentBuildId(
     baseUrl,
-    `/environment/${namespace}/${environment}/`
+    namespace,
+    environment
   );
-  const environmentInfoResponse = await fetch(environmentInfoUrl);
 
-  if (environmentInfoResponse.ok) {
-    const { data } = await environmentInfoResponse.json();
+  if (currentBuildId !== undefined) {
     const url = createApiUrl(
       baseUrl,
-      `/build/${data.current_build_id}/packages/?page=${page}&size=${size}&sort_by=name`
+      `/build/${currentBuildId}/packages/?page=${page}&size=${size}&sort_by=name`
     );
     const response = await fetch(url);
     if (response.ok) {
@@ -207,6 +267,41 @@ export async function fetchEnvironmentPackages(
     }
   }
   return {};
+}
+
+export async function fetchSpecifiedPackages(
+  baseUrl: string,
+  namespace: string,
+  environment: string
+): Promise<Array<string>> {
+  if (namespace === undefined || environment === undefined) {
+    console.error(
+      `Error: invalid arguments to fetchEnvironmentPackages: envNamespace ${namespace} envName ${environment}`
+    );
+    return [];
+  }
+
+  const currentBuildId = await fetchCurrentBuildId(
+    baseUrl,
+    namespace,
+    environment
+  );
+
+  if (currentBuildId === undefined) {
+    return [];
+  }
+
+  const currentBuild = await fetchCurrentBuild(
+    baseUrl,
+    currentBuildId as number
+  );
+
+  if (currentBuild === undefined) {
+    return [];
+  }
+
+  const { dependencies } = currentBuild.specification.spec;
+  return dependencies;
 }
 
 /**
@@ -222,7 +317,10 @@ export async function fetchBuildPackages(
   baseUrl: string,
   build_id: number
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
-  const url = createApiUrl(baseUrl, `/build/${build_id}/`);
+  const url = createApiUrl(
+    baseUrl,
+    `/build/${build_id}/packages/?sort_by=name`
+  );
   const response = await fetch(url);
   if (response.ok) {
     return await response.json();
@@ -289,13 +387,12 @@ export async function createEnvironment(
   namespace: string,
   environment: string,
   dependencies: Array<string>
-): Promise<void> {
+): Promise<Response> {
   const specification: ICondaStoreSpecification = {
     name: environment,
     dependencies
   };
-  await specifyEnvironment(baseUrl, namespace, stringify(specification));
-  return;
+  return await specifyEnvironment(baseUrl, namespace, stringify(specification));
 }
 
 /**
@@ -316,7 +413,7 @@ export async function cloneEnvironment(
   existingEnvironment: string,
   namespace: string,
   environment: string
-): Promise<void> {
+): Promise<Response> {
   // Get specification for existing environment
   const specificationResponse = await exportEnvironment(
     baseUrl,
@@ -367,40 +464,6 @@ export async function removeEnvironment(
   return;
 }
 
-export async function installPackages(
-  baseUrl: string,
-  namespace: string,
-  environment: string,
-  packages: Array<string>
-): Promise<void> {
-  // Fetch all the packages from the current environment
-  let page = 1;
-  let count, data, size;
-  let hasMorePackages = true;
-  let installed: Array<ICondaStorePackage> = [];
-
-  while (hasMorePackages) {
-    ({ count, data, page, size } = await fetchEnvironmentPackages(
-      baseUrl,
-      namespace,
-      environment,
-      page
-    ));
-    hasMorePackages = page * size < count;
-    installed = [...installed, ...data];
-  }
-
-  const toInstall = new Set(packages);
-  const dependencies = installed
-    .map(({ name, version }) => `${name}=${version}`)
-    .concat(Array.from(toInstall));
-
-  console.log(dependencies);
-
-  await createEnvironment(baseUrl, namespace, environment, dependencies);
-  return;
-}
-
 /**
  * Remove one or more packages from an environment.
  *
@@ -417,31 +480,62 @@ export async function removePackages(
   environment: string,
   packages: Array<string>
 ): Promise<void> {
-  // Fetch all the packages from the current environment
-  let page = 1;
-  let count, data, size;
-  let hasMorePackages = true;
-  let installed: Array<ICondaStorePackage> = [];
-
-  while (hasMorePackages) {
-    ({ count, data, page, size } = await fetchEnvironmentPackages(
-      baseUrl,
-      namespace,
-      environment,
-      page
-    ));
-    hasMorePackages = page * size < count;
-    installed = [...installed, ...data];
-  }
-
+  console.log('remove packages', packages);
+  const specDeps = await fetchSpecifiedPackages(
+    baseUrl,
+    namespace,
+    environment
+  );
+  const toDelete = new Map(
+    packages.map(pkg => {
+      const [name, version = ''] = pkg.split('=');
+      return [name, version];
+    })
+  );
   // Reconstruct the specification for the current environment, minus the packages to delete
-  const toDelete = new Set(packages);
-  const dependencies = installed
-    .filter(({ name }) => !toDelete.has(name))
-    .map(({ name, version }) => `${name}=${version}`);
+  const nextSpecDeps = specDeps
+    .map(dep => dep.split('='))
+    .filter(([name, version]) => !toDelete.has(name))
+    .map(([name, version]) => [name, version].join('='));
 
-  await createEnvironment(baseUrl, namespace, environment, dependencies);
-  return;
+  const response = await createEnvironment(
+    baseUrl,
+    namespace,
+    environment,
+    nextSpecDeps
+  );
+
+  const {
+    data: { build_id: buildId }
+  } = await response.json();
+
+  // Start checking the status of the new build. If the build succeeds, resolve
+  // the promise. If it fails or if it takes too long, reject the promise.
+  return new Promise((resolve, reject) => {
+    // will reject if it takes too long to resolve
+    const timeoutId = setTimeout(() => {
+      reject(new Error('Build took too long'));
+    }, /* one minute */ 1000 * 60);
+    const getBuildStatus = async () => {
+      const url = createApiUrl(baseUrl, `/build/${buildId}`);
+      const response = await fetch(url);
+      const {
+        data: { status }
+      } = await response.json();
+      console.log('status', status);
+      if (status === 'COMPLETED') {
+        clearTimeout(timeoutId);
+        resolve();
+      } else if (status === 'FAILED') {
+        clearTimeout(timeoutId);
+        reject(new Error('Build failed!'));
+      } else {
+        // wait a bit, then check again
+        setTimeout(getBuildStatus, 2000);
+      }
+    };
+    getBuildStatus();
+  });
 }
 
 /**
@@ -460,14 +554,17 @@ export async function exportEnvironment(
   environment: string
 ): Promise<Response> {
   // First get the build ID of the requested environment
-  const enviornmentInfoUrl = createApiUrl(
+  const currentBuildId = await fetchCurrentBuildId(
     baseUrl,
-    `/environment/${namespace}/${environment}/`
+    namespace,
+    environment
   );
-  const environmentInfoResponse = await fetch(enviornmentInfoUrl);
-
-  const { data } = await environmentInfoResponse.json();
-  const url = createApiUrl(baseUrl, `/build/${data.current_build_id}/yaml/`);
+  if (currentBuildId === undefined) {
+    throw new Error(
+      'Could not fetch current build id while attempting to export environment'
+    );
+  }
+  const url = createApiUrl(baseUrl, `/build/${currentBuildId}/yaml/`);
   return await fetch(url);
 }
 
@@ -480,7 +577,7 @@ export async function exportEnvironment(
  * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
  * @param {string} namespace - Namespace into which the environment resides.
  * @param {string} environment - Name of the environment.
- * @param {Array<string>} packages - List of packages to add to the environment.
+ * @param {Array<string>} packages - List of packages in "name=version" format to add to the environment.
  * @returns {Promise<void>}
  */
 export async function addPackages(
@@ -488,33 +585,68 @@ export async function addPackages(
   namespace: string,
   environment: string,
   packages: Array<string>
-): Promise<void> {
-  // Fetch all the packages from the current environment
-  let page = 1;
-  let count, data, size;
-  let hasMorePackages = true;
-  let installed: Array<ICondaStorePackage> = [];
-
-  while (hasMorePackages) {
-    ({ count, data, page, size } = await fetchEnvironmentPackages(
-      baseUrl,
-      namespace,
-      environment,
-      page
-    ));
-    hasMorePackages = page * size < count;
-    installed = [...installed, ...data];
-  }
+): Promise<Error | void> {
+  console.log('add packages', packages);
+  const specDeps = await fetchSpecifiedPackages(
+    baseUrl,
+    namespace,
+    environment
+  );
 
   // Generate a specification for the new environment including the installed as well as new packages
-  const toAdd = new Set(packages);
-  let dependencies: Array<string> = [];
-  installed.forEach(({ name, version }) => {
+  const toAdd = new Map(
+    packages.map(pkg => {
+      const [name, version = ''] = pkg.split('=');
+      return [name, version];
+    })
+  );
+  const nextSpec: Array<string> = [];
+  // Add installed packages to list of dependencies
+  specDeps.forEach(dep => {
+    const [name] = dep.split('=');
     // Don't add any package that is already installed
     toAdd.delete(name);
-    dependencies.push(`${name}=${version}`);
+    nextSpec.push(dep);
   });
-  dependencies = [...dependencies, ...toAdd];
+  const newPackagesToAdd = Array.from(toAdd).map(
+    ([name, version]) => `${name}=${version}`
+  );
+  nextSpec.push(...newPackagesToAdd);
+  const response = await createEnvironment(
+    baseUrl,
+    namespace,
+    environment,
+    nextSpec
+  );
+  const {
+    data: { build_id: buildId }
+  } = await response.json();
 
-  await createEnvironment(baseUrl, namespace, environment, dependencies);
+  // Start checking the status of the new build. If the build succeeds, resolve
+  // the promise. If it fails or if it takes too long, reject the promise.
+  return new Promise((resolve, reject) => {
+    // will reject if it takes too long to resolve
+    const timeoutId = setTimeout(() => {
+      reject(new Error('Build took too long'));
+    }, /* one minute */ 1000 * 60);
+    const getBuildStatus = async () => {
+      const url = createApiUrl(baseUrl, `/build/${buildId}`);
+      const response = await fetch(url);
+      const {
+        data: { status }
+      } = await response.json();
+      console.log('status', status);
+      if (status === 'COMPLETED') {
+        clearTimeout(timeoutId);
+        resolve();
+      } else if (status === 'FAILED') {
+        clearTimeout(timeoutId);
+        reject(new Error('Build failed!'));
+      } else {
+        // wait a bit, then check again
+        setTimeout(getBuildStatus, 2000);
+      }
+    };
+    getBuildStatus();
+  });
 }
