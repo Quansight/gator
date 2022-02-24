@@ -51,6 +51,7 @@ export interface IPkgListProps {
    * Reference with triggers callback when the user scrolls to the bottom of the package list.
    */
   observe: (element?: HTMLElement) => void;
+  isLoadingVersions: boolean;
 }
 
 /**
@@ -69,6 +70,7 @@ export function CondaPkgList({
   hasDescription,
   height,
   packages,
+  isLoadingVersions,
   onPkgClick,
   onPkgChange,
   onPkgGraph,
@@ -77,6 +79,7 @@ export function CondaPkgList({
   hasDescription: boolean;
   height: number;
   packages: Conda.IPackage[];
+  isLoadingVersions: boolean;
   onPkgClick: (pkg: Conda.IPackage) => void;
   onPkgChange: (pkg: Conda.IPackage, version: string) => void;
   onPkgGraph: (pkg: Conda.IPackage) => void;
@@ -95,6 +98,7 @@ export function CondaPkgList({
       hasDescription={hasDescription}
       height={height}
       packages={packages}
+      isLoadingVersions={isLoadingVersions}
       onPkgClick={onPkgClick}
       onPkgChange={onPkgChange}
       onPkgGraph={onPkgGraph}
@@ -110,43 +114,51 @@ class CondaPkgView extends React.Component<IPkgListProps> {
     packages: []
   };
 
-  protected changeRender = (pkg: Conda.IPackage): JSX.Element => (
-    <div className={'lm-Widget'}>
-      <HTMLSelect
-        className={classes(Style.VersionSelection, CONDA_PACKAGE_SELECT_CLASS)}
-        value={pkg.version_selected}
-        onClick={(evt: React.MouseEvent): void => {
-          evt.stopPropagation();
-        }}
-        onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void =>
-          this.props.onPkgChange(pkg, evt.target.value)
-        }
-        aria-label="Package versions"
-      >
-        <option key="-3" value={'none'}>
-          Remove
-        </option>
-        {!pkg.version_installed && (
-          <option key="-2" value={''}>
-            Install
+  protected changeRender = (pkg: Conda.IPackage): JSX.Element => {
+    if (this.props.isLoadingVersions) {
+      return <span>Loading versions...</span>;
+    }
+    return (
+      <div className={'lm-Widget'}>
+        <HTMLSelect
+          className={classes(
+            Style.VersionSelection,
+            CONDA_PACKAGE_SELECT_CLASS
+          )}
+          value={pkg.version_selected}
+          onClick={(evt: React.MouseEvent): void => {
+            evt.stopPropagation();
+          }}
+          onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void =>
+            this.props.onPkgChange(pkg, evt.target.value)
+          }
+          aria-label="Package versions"
+        >
+          <option key="-3" value={'none'}>
+            Remove
           </option>
-        )}
-        {pkg.updatable && (
-          <option key="-1" value={''}>
-            Update
-          </option>
-        )}
-        {
-          // Some packages have duplicate version strings; make them unique here
-          [...new Set(pkg.version)].map((v: string) => (
-            <option key={v} value={v}>
-              {v}
+          {!pkg.version_installed && (
+            <option key="-2" value={''}>
+              Install
             </option>
-          ))
-        }
-      </HTMLSelect>
-    </div>
-  );
+          )}
+          {pkg.updatable && (
+            <option key="-1" value={''}>
+              Update
+            </option>
+          )}
+          {
+            // Some packages have duplicate version strings; make them unique here
+            [...new Set(pkg.version)].map((v: string) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))
+          }
+        </HTMLSelect>
+      </div>
+    );
+  };
 
   protected iconRender = (pkg: Conda.IPackage): JSX.Element => {
     if (pkg.version_installed) {

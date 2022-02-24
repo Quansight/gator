@@ -2,7 +2,6 @@ import { showDialog, Dialog } from '@jupyterlab/apputils';
 import { INotification } from 'jupyterlab_toastify';
 import * as React from 'react';
 import debounce from 'lodash.debounce';
-import semver from 'semver';
 import { style } from 'typestyle';
 import { Conda } from '../tokens';
 import { CondaPkgList } from './CondaPkgList';
@@ -73,8 +72,9 @@ export interface IPkgPanelState {
   /**
    * Current search term
    */
-  searchTerm: string;
+  isLoadingVersions: boolean;
   isLoadingSearch: boolean;
+  searchTerm: string;
 }
 
 /** Top level React component for widget */
@@ -90,6 +90,7 @@ export class CondaPkgPanel extends React.Component<
       hasDescription: false,
       hasUpdate: false,
       packages: [],
+      isLoadingVersions: false,
       isLoadingSearch: false,
       searchMatchPackages: [],
       selected: [],
@@ -125,37 +126,17 @@ export class CondaPkgPanel extends React.Component<
       // Get installed packages
       const packages = await this._model.refresh(false, environmentLoading);
       this.setState({
-        packages: packages
-      });
-
-      const available = await this._model.refresh(true, environmentLoading);
-
-      let hasUpdate = false;
-      available.forEach((pkg: Conda.IPackage, index: number) => {
-        try {
-          if (
-            pkg.version_installed &&
-            semver.gt(
-              semver.coerce(pkg.version[pkg.version.length - 1]),
-              semver.coerce(pkg.version_installed)
-            )
-          ) {
-            available[index].updatable = true;
-            hasUpdate = true;
-          }
-        } catch (error) {
-          console.debug(
-            `Error when testing updatable status for ${pkg.name}`,
-            error
-          );
-        }
-      });
-
-      this.setState({
-        isLoading: false,
+        packages: packages,
         hasDescription: this._model.hasDescription(),
-        packages: available,
-        hasUpdate
+        isLoading: false,
+        isLoadingVersions: true
+      });
+
+      this._model.addVersions(packages).then(packagesWithAllVersions => {
+        this.setState({
+          packages: packagesWithAllVersions,
+          isLoadingVersions: false
+        });
       });
     } catch (error) {
       if (error.message !== 'cancelled') {
@@ -180,45 +161,55 @@ export class CondaPkgPanel extends React.Component<
 
   handleClick(pkg: Conda.IPackage): void {
     if (this.state.isApplyingChanges) {
+      console.log('handleClick, isApplyingChanges = true, early return');
       return;
     }
+    console.log('pkg', JSON.stringify(pkg));
 
-    let selection: Array<Conda.IPackage> = this.state.selected;
+    const selection: Array<Conda.IPackage> = this.state.selected.filter(
+      ({ name }) => name !== pkg.name
+    );
+    console.log('selection', selection.length, 'state.selected', this.state.selected.length);
 
-    // If the clicked package was already selected, deselect it; otherwise add it to the selected
-    // packages
-    if (this.state.selected.some(({ name }) => name === pkg.name)) {
-      selection = selection.filter(({ name }) => name !== pkg.name);
-    } else {
-      if (pkg.version_installed) {
-        if (pkg.version_installed === pkg.version_selected) {
-          pkg.version_selected = pkg.updatable ? '' : 'none';
+    if (pkg.version_installed) {
+      if (pkg.version_installed === pkg.version_selected) {
+        if (pkg.updatable) {
+          pkg.version_selected = ''; // Set for update
           selection.push(pkg);
         } else {
-          if (pkg.version_selected === 'none') {
-            pkg.version_selected = pkg.version_installed;
-          } else {
-            pkg.version_selected = 'none'; // Set for removal
-            selection.push(pkg);
-          }
+          pkg.version_selected = 'none'; // Set for removal
+          selection.push(pkg);
         }
       } else {
-        if (pkg.version_selected !== 'none') {
-          pkg.version_selected = 'none'; // Unselect
+        if (pkg.version_selected === 'none') {
+          pkg.version_selected = pkg.version_installed;
         } else {
-          pkg.version_selected = ''; // Select 'Any'
+          pkg.version_selected = 'none'; // Set for removal
           selection.push(pkg);
         }
       }
+    } else {
+      if (pkg.version_selected !== 'none') {
+        pkg.version_selected = 'none'; // Unselect
+      } else {
+        pkg.version_selected = ''; // Select 'Any'
+        selection.push(pkg);
+      }
     }
 
+    // If the user unselects all selected packages while in the "Selected"
+    // view, we change to the default view
+    // let activeFilter = this.state.activeFilter;
+    // const shouldClearSelectedFilter =
+    //   selection.length === 0 && this.state.activeFilter === PkgFilters.Selected;
+    // if (shouldClearSelectedFilter) {
+    //   activeFilter = PkgFilters.All;
+    // }
+
+    console.log('selection after', JSON.stringify(selection));
+
     this.setState({
-      selected: selection,
-      activeFilter:
-        selection.length === 0 &&
-        this.state.activeFilter === PkgFilters.Selected
-          ? PkgFilters.All
-          : this.state.activeFilter
+      selected: selection
     });
   }
 
@@ -227,7 +218,11 @@ export class CondaPkgPanel extends React.Component<
       return;
     }
 
-    let selection = this.state.selected.filter(({ name }) => name !== pkg.name);
+    console.log('handleVersionSelection', pkg, version);
+
+    const selection = this.state.selected.filter(
+      ({ name }) => name !== pkg.name
+    );
 
     if (pkg.version_installed) {
       if (pkg.version_installed !== version) {
@@ -491,13 +486,11 @@ export class CondaPkgPanel extends React.Component<
           version_installed,
           version_selected
         });
+        console.log('package', name, JSON.stringify(packageMap.get(name)));
       }
     });
-    const combined: Array<Conda.IPackage> = [];
-    packageMap.forEach(pkg => {
-      combined.push(pkg);
-    });
-    return combined;
+    const updated: Array<Conda.IPackage> = Array.from(packageMap.values());
+    return updated;
   }
 
   /**
@@ -528,26 +521,29 @@ export class CondaPkgPanel extends React.Component<
     // note: search results may be empty
     let packages: Conda.IPackage[];
     if (!this.state.searchTerm) {
+      // empty search box? -> show installed packages
+      console.log('no search term, packages = this.state.packages');
       packages = this.state.packages;
     } else if (this.state.isLoadingSearch) {
+      // clear the page whenever the user starts typing
+      console.log('isLoadingSearch, packages = []');
       packages = [];
     } else {
+      // we've fetched the search results, so now show them
+      console.log('done searching, packages = this.state.searchMatchPackages');
       packages = this.state.searchMatchPackages;
     }
 
-    let filteredPkgs = this.combinePackagesSelected(
-      packages,
-      this.state.selected
-    );
+    console.log('using package filter', this.state.activeFilter);
+
+    let filteredPkgs = packages;
     if (this.state.activeFilter === PkgFilters.Installed) {
       filteredPkgs = filteredPkgs.filter(pkg => pkg.version_installed);
     } else if (this.state.activeFilter === PkgFilters.Available) {
       filteredPkgs = filteredPkgs.filter(pkg => !pkg.version_installed);
     } else if (this.state.activeFilter === PkgFilters.Updatable) {
       filteredPkgs = filteredPkgs.filter(pkg => pkg.updatable);
-    } else if (
-      this.state.activeFilter === PkgFilters.Selected
-    ) {
+    } else if (this.state.activeFilter === PkgFilters.Selected) {
       filteredPkgs = this.state.selected;
     }
 
@@ -587,6 +583,7 @@ export class CondaPkgPanel extends React.Component<
             this.state.hasDescription && this.props.width > PANEL_SMALL_WIDTH
           }
           packages={filteredPkgs}
+          isLoadingVersions={this.state.isLoadingVersions}
           onPkgClick={this.handleClick}
           onPkgChange={this.handleVersionSelection}
           onPkgGraph={this.handleDependenciesGraph}

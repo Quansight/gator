@@ -131,6 +131,7 @@ export namespace Conda {
    * Interface of the packages service
    */
   export interface IPackageManager {
+    addVersions?(packages: IPackage[]): Promise<IPackage[]>;
     /**
      * Environment in which packages are handled
      *

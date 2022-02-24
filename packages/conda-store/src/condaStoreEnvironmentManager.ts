@@ -411,40 +411,6 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
    * if none is provided, the current environment is used.
    * @return {Promise<Array<ICondaStorePackage>>} Array of installed conda-store packages.
    */
-  async _loadInstalledPackages(
-    environment?: string
-  ): Promise<Array<Conda.IPackage>> {
-    if (this.hasMoreInstalledPackages) {
-      const { environment: envName, namespace: namespaceName } =
-        parseEnvironment(
-          environment !== undefined ? environment : this.environment
-        );
-      const { count, data } = await fetchEnvironmentPackages(
-        this.baseUrl,
-        namespaceName,
-        envName,
-        this.installedPage,
-        this.installedPageSize
-      );
-      this.hasMoreInstalledPackages =
-        count > this.installedPage * this.installedPageSize;
-      this.installedPage += 1;
-      this.installedPackages = [...this.installedPackages, ...data];
-    }
-    const { installed } = this.truncate(this.installedPackages, []);
-    const packages = this.mergeConvert(installed);
-    console.log('return packages from loadInstalledPackages');
-    return packages;
-  }
-
-  /**
-   * Load the next page of installed packages.
-   *
-   * @async
-   * @param {string} environment - Environment for which the installed packages are to be fetched;
-   * if none is provided, the current environment is used.
-   * @return {Promise<Array<ICondaStorePackage>>} Array of installed conda-store packages.
-   */
   async loadInstalledPackages(
     environment?: string
   ): Promise<Array<Conda.IPackage>> {
@@ -473,19 +439,10 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     // To get all available versions of the specified dependencies
     // we need to search the server for each dependency
     let allAvailableVersions: Array<ICondaStorePackage> = [];
-    const specPackageNames: string[] = [];
-    for (const dep of specDeps) {
+    const specPackageNames: string[] = specDeps.map(dep => {
       const [name] = dep.split('=');
-      specPackageNames.push(name);
-      const nameMatches = await getAllPackagesMatchingSearch(
-        this.baseUrl,
-        name
-      );
-      const nameEquals = nameMatches.filter(pkg => pkg.name === name);
-      allAvailableVersions = [...allAvailableVersions, ...nameEquals];
-    }
-
-    console.log('allAvailableVersions', allAvailableVersions);
+      return name;
+    });
 
     // To get the version that was actually installed (as distinct from the
     // version specified/request) we ask for all of the packages in the
@@ -510,6 +467,35 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     console.log('return packages from loadInstalledPackages');
     this.hasMoreInstalledPackages = false;
     return packages;
+  }
+
+  async addVersions(
+    installedPackages: Array<Conda.IPackage>
+  ): Promise<Array<Conda.IPackage>> {
+    const packageNames = installedPackages.map(pkg => pkg.name);
+    const allAvailableVersions: Array<ICondaStorePackage> = [];
+    for (const name of packageNames) {
+      const nameMatches = await getAllPackagesMatchingSearch(
+        this.baseUrl,
+        name
+      );
+      // we have to use strict equal because the search endpoint returns partial
+      // matches for example, if the conda package is python, it will return
+      // python-json, awspython, python, etc.
+      const nameEquals = nameMatches.filter(pkg => pkg.name === name);
+      allAvailableVersions.push(...nameEquals);
+    }
+    const byName = this.groupPackages(allAvailableVersions);
+    console.log('allAvailableVersions', allAvailableVersions);
+    const installedPackagesWithAllVersions = installedPackages.map(pkg => {
+      const allVersions = byName.get(pkg.name).map(pkg => pkg.version);
+      allVersions.sort(semverCompare);
+      return {
+        ...pkg,
+        version: allVersions
+      };
+    });
+    return installedPackagesWithAllVersions;
   }
 
   /**
@@ -697,7 +683,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   }
 
   async update(packages: Array<string>, environment?: string): Promise<void> {
-    return Promise.resolve(void 0);
+    return this.install(packages, environment);
   }
 
   /**

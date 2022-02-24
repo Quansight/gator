@@ -510,12 +510,8 @@ export async function removePackages(
   } = await response.json();
 
   // Start checking the status of the new build. If the build succeeds, resolve
-  // the promise. If it fails or if it takes too long, reject the promise.
+  // the promise. If it fails, reject the promise.
   return new Promise((resolve, reject) => {
-    // will reject if it takes too long to resolve
-    const timeoutId = setTimeout(() => {
-      reject(new Error('Build took too long'));
-    }, /* one minute */ 1000 * 60);
     const getBuildStatus = async () => {
       const url = createApiUrl(baseUrl, `/build/${buildId}`);
       const response = await fetch(url);
@@ -524,14 +520,12 @@ export async function removePackages(
       } = await response.json();
       console.log('status', status);
       if (status === 'COMPLETED') {
-        clearTimeout(timeoutId);
         resolve();
       } else if (status === 'FAILED') {
-        clearTimeout(timeoutId);
         reject(new Error('Build failed!'));
       } else {
         // wait a bit, then check again
-        setTimeout(getBuildStatus, 2000);
+        setTimeout(getBuildStatus, 5000);
       }
     };
     getBuildStatus();
@@ -594,24 +588,22 @@ export async function addPackages(
   );
 
   // Generate a specification for the new environment including the installed as well as new packages
-  const toAdd = new Map(
-    packages.map(pkg => {
-      const [name, version = ''] = pkg.split('=');
-      return [name, version];
-    })
-  );
-  const nextSpec: Array<string> = [];
-  // Add installed packages to list of dependencies
-  specDeps.forEach(dep => {
-    const [name] = dep.split('=');
-    // Don't add any package that is already installed
-    toAdd.delete(name);
-    nextSpec.push(dep);
+  const nameToVersion = (deps: string[]) =>
+    new Map(
+      deps.map(dep => {
+        const [name, version = ''] = dep.split('=');
+        return [name, version];
+      })
+    );
+  const requested = nameToVersion(packages);
+  const next = nameToVersion(specDeps);
+  requested.forEach((version, name) => {
+    next.set(name, version);
   });
-  const newPackagesToAdd = Array.from(toAdd).map(
-    ([name, version]) => `${name}=${version}`
+  const nextSpec = Array.from(next).map(([name, version]) =>
+    [name, version].join('=')
   );
-  nextSpec.push(...newPackagesToAdd);
+  console.log('nextSpec', nextSpec);
   const response = await createEnvironment(
     baseUrl,
     namespace,
@@ -623,12 +615,8 @@ export async function addPackages(
   } = await response.json();
 
   // Start checking the status of the new build. If the build succeeds, resolve
-  // the promise. If it fails or if it takes too long, reject the promise.
+  // the promise. If it fails, reject the promise.
   return new Promise((resolve, reject) => {
-    // will reject if it takes too long to resolve
-    const timeoutId = setTimeout(() => {
-      reject(new Error('Build took too long'));
-    }, /* one minute */ 1000 * 60);
     const getBuildStatus = async () => {
       const url = createApiUrl(baseUrl, `/build/${buildId}`);
       const response = await fetch(url);
@@ -637,14 +625,12 @@ export async function addPackages(
       } = await response.json();
       console.log('status', status);
       if (status === 'COMPLETED') {
-        clearTimeout(timeoutId);
         resolve();
       } else if (status === 'FAILED') {
-        clearTimeout(timeoutId);
         reject(new Error('Build failed!'));
       } else {
         // wait a bit, then check again
-        setTimeout(getBuildStatus, 2000);
+        setTimeout(getBuildStatus, 5000);
       }
     };
     getBuildStatus();

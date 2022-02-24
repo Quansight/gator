@@ -1,5 +1,4 @@
 import { faCartArrowDown } from '@fortawesome/free-solid-svg-icons/faCartArrowDown';
-import { faExternalLinkSquareAlt } from '@fortawesome/free-solid-svg-icons/faExternalLinkSquareAlt';
 import { faSyncAlt } from '@fortawesome/free-solid-svg-icons/faSyncAlt';
 import { faUndoAlt } from '@fortawesome/free-solid-svg-icons/faUndoAlt';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -70,6 +69,7 @@ export interface ICondaPkgToolBarProps {
 
 export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
   const hasSelection = props.selectionCount > 0;
+  const isShowingSelection = props.category === PkgFilters.Selected;
   return (
     <div className={`lm-Widget ${CONDA_PACKAGES_TOOLBAR_CLASS} jp-Toolbar`}>
       {!props.filterDisabled && (
@@ -98,41 +98,25 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
             rightIcon="search"
           />
         </div>
-        {props.filterDisabled && hasSelection && (
+        {props.filterDisabled && (hasSelection || isShowingSelection) && (
           <button
             className="jp-NbConda-linklike-button"
             type="button"
             onClick={props.onToggleSelected}
           >
-            {props.category !== PkgFilters.Selected ? (
+            {isShowingSelection ? (
+              <>Show installed packages</>
+            ) : (
               <>
                 You've selected {props.selectionCount}{' '}
                 {props.selectionCount === 1 ? 'package' : 'packages'} for
                 modification
               </>
-            ) : (
-              <>Show installed packages</>
             )}
           </button>
         )}
       </div>
       <div className="lm-Widget jp-Toolbar-spacer jp-Toolbar-item" />
-      <Button
-        className="jp-ToolbarButtonComponent"
-        disabled={!props.hasUpdate}
-        minimal
-        onMouseDown={props.onUpdateAll}
-        title="Update all packages"
-      >
-        <FontAwesomeIcon
-          icon={faExternalLinkSquareAlt}
-          style={{
-            color: props.hasUpdate
-              ? 'var(--jp-accent-color0)'
-              : 'var(--jp-inverse-layout-color3)'
-          }}
-        />
-      </Button>
       <Button
         className="jp-ToolbarButtonComponent"
         disabled={!hasSelection}
