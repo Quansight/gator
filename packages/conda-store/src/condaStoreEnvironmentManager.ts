@@ -239,7 +239,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   availablePageSize = 100;
   availablePackages: Array<ICondaStorePackage> = [];
   baseUrl = '';
-  searchLabel = 'Search more packages';
+  searchLabel = 'Add packages';
 
   constructor(environment?: string) {
     this.environment = environment;

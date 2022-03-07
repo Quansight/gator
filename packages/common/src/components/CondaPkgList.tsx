@@ -258,13 +258,6 @@ class CondaPkgView extends React.Component<IPkgListProps> {
   protected rowRenderer = (props: ListChildComponentProps): JSX.Element => {
     const { data, index, style } = props;
     const pkg = data[index] as Conda.IPackage;
-    let channelName = pkg.channel;
-    let channelUrl = '';
-    const channelUrlParts = pkg.channel.split('/');
-    if (channelUrlParts.length) {
-      channelUrl = pkg.channel;
-      channelName = channelUrlParts.slice(-1)[0];
-    }
     return (
       <div
         className={this.rowClassName(index, pkg)}
@@ -283,7 +276,11 @@ class CondaPkgView extends React.Component<IPkgListProps> {
         </div>
         {this.props.hasDescription && (
           <div
-            className={classes(Style.CellSummary, Style.DescriptionSize)}
+            className={classes(
+              Style.CellSummary,
+              Style.DescriptionSize,
+              Style.DescriptionAlign
+            )}
             role="gridcell"
             title={pkg.summary}
           >
@@ -295,19 +292,6 @@ class CondaPkgView extends React.Component<IPkgListProps> {
         </div>
         <div className={classes(Style.Cell, Style.ChangeSize)} role="gridcell">
           {this.changeRender(pkg)}
-        </div>
-        <div
-          className={classes(Style.Cell, Style.ChannelSize)}
-          role="gridcell"
-          title={channelName}
-        >
-          {channelUrl ? (
-            <a href={channelUrl} target="_blank" rel="noreferrer">
-              {channelName}
-            </a>
-          ) : (
-            channelName
-          )}
         </div>
       </div>
     );
@@ -354,12 +338,6 @@ class CondaPkgView extends React.Component<IPkgListProps> {
                     role="columnheader"
                   >
                     Change To
-                  </div>
-                  <div
-                    className={classes(Style.Cell, Style.ChannelSize)}
-                    role="columnheader"
-                  >
-                    Channel
                   </div>
                 </div>
                 <FixedSizeList
@@ -433,6 +411,10 @@ namespace Style {
   export const StatusSize = style({ flex: '0 0 12px', padding: '0px 2px' });
   export const NameSize = style({ flex: '1 1 200px' });
   export const DescriptionSize = style({ flex: '5 5 250px' });
+  export const DescriptionAlign = style({
+    display: 'flex',
+    alignItems: 'center'
+  });
   export const VersionSize = style({ flex: '0 0 90px' });
   export const ChangeSize = style({ flex: '0 0 120px' });
   export const ChannelSize = style({ flex: '1 1 120px' });

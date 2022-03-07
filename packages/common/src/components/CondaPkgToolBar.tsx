@@ -98,24 +98,29 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
             rightIcon="search"
           />
         </div>
-        {props.filterDisabled && (hasSelection || isShowingSelection) && (
-          <button
-            className="jp-NbConda-linklike-button"
-            type="button"
-            onClick={props.onToggleSelected}
-          >
-            {isShowingSelection ? (
-              <>Show installed packages</>
-            ) : (
-              <>
-                You've selected {props.selectionCount}{' '}
-                {props.selectionCount === 1 ? 'package' : 'packages'} for
-                modification
-              </>
-            )}
-          </button>
-        )}
       </div>
+      {props.filterDisabled && (hasSelection || isShowingSelection) && (
+        <div className={classes(Style.ShowSelected)}>
+          <label>
+            <input
+              name="package-filter"
+              type="radio"
+              checked={!props.searchTerm && isShowingSelection}
+              onChange={props.onToggleSelected}
+            />
+            Selected ({props.selectionCount})
+          </label>
+          <label>
+            <input
+              name="package-filter"
+              type="radio"
+              checked={!props.searchTerm && !isShowingSelection}
+              onChange={props.onToggleSelected}
+            />
+            Installed
+          </label>
+        </div>
+      )}
       <div className="lm-Widget jp-Toolbar-spacer jp-Toolbar-item" />
       <Button
         className="jp-ToolbarButtonComponent"
@@ -174,5 +179,10 @@ namespace Style {
 
   export const Search = style({
     padding: '4px'
+  });
+
+  export const ShowSelected = style({
+    display: 'flex',
+    alignItems: 'center'
   });
 }
