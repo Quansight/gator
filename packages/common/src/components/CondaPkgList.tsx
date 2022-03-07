@@ -52,6 +52,7 @@ export interface IPkgListProps {
    */
   observe: (element?: HTMLElement) => void;
   isLoadingVersions: boolean;
+  hasMorePackages: boolean;
 }
 
 /**
@@ -70,6 +71,7 @@ export function CondaPkgList({
   hasDescription,
   height,
   packages,
+  hasMorePackages,
   isLoadingVersions,
   onPkgClick,
   onPkgChange,
@@ -79,6 +81,7 @@ export function CondaPkgList({
   hasDescription: boolean;
   height: number;
   packages: Conda.IPackage[];
+  hasMorePackages: boolean;
   isLoadingVersions: boolean;
   onPkgClick: (pkg: Conda.IPackage) => void;
   onPkgChange: (pkg: Conda.IPackage, version: string) => void;
@@ -87,10 +90,13 @@ export function CondaPkgList({
 }): JSX.Element {
   const { observe } = useInView({
     rootMargin: '200px 0px',
-    onEnter: async ({ unobserve, observe }) => {
-      unobserve();
-      await onPkgBottomHit();
-      observe();
+    onChange: async ({ inView, unobserve, observe }) => {
+      console.log('USE IN VIEW. inView?', inView, 'hasMorePackages', hasMorePackages);
+      if (hasMorePackages && inView) {
+        unobserve();
+        await onPkgBottomHit();
+        observe();
+      }
     }
   });
   return (

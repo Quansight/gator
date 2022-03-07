@@ -239,15 +239,13 @@ async function fetchCurrentBuildId(
 export async function fetchEnvironmentPackages(
   baseUrl: string,
   namespace: string,
-  environment: string,
-  page = 1,
-  size = 100
-): Promise<IPaginatedResult<ICondaStorePackage>> {
+  environment: string
+): Promise<Array<ICondaStorePackage>> {
   if (namespace === undefined || environment === undefined) {
     console.error(
       `Error: invalid arguments to fetchEnvironmentPackages: envNamespace ${namespace} envName ${environment}`
     );
-    return {};
+    return [];
   }
 
   const currentBuildId = await fetchCurrentBuildId(
@@ -256,17 +254,29 @@ export async function fetchEnvironmentPackages(
     environment
   );
 
-  if (currentBuildId !== undefined) {
+  // eslint-disable-next-line eqeqeq
+  if (currentBuildId == null) {
+    return [];
+  }
+
+  let packages: Array<ICondaStorePackage> = [];
+  let data: Array<ICondaStorePackage>;
+  let count = 1;
+  let page = 1;
+  const size = 100;
+
+  while (packages.length < count) {
     const url = createApiUrl(
       baseUrl,
       `/build/${currentBuildId}/packages/?page=${page}&size=${size}&sort_by=name`
     );
     const response = await fetch(url);
-    if (response.ok) {
-      return response.json();
-    }
+    ({ data, count } = await response.json());
+    page++;
+    packages = [...packages, ...data];
   }
-  return {};
+
+  return packages;
 }
 
 export async function fetchSpecifiedPackages(
@@ -276,7 +286,7 @@ export async function fetchSpecifiedPackages(
 ): Promise<Array<string>> {
   if (namespace === undefined || environment === undefined) {
     console.error(
-      `Error: invalid arguments to fetchEnvironmentPackages: envNamespace ${namespace} envName ${environment}`
+      `Error: invalid arguments to fetchSpecifiedPackages: envNamespace ${namespace} envName ${environment}`
     );
     return [];
   }

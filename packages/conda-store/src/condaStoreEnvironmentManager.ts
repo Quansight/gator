@@ -240,6 +240,10 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   availablePackages: Array<ICondaStorePackage> = [];
   baseUrl = '';
   searchLabel = 'Add packages';
+  searchPage = 0;
+  searchTerm = '';
+  searchMatchPackages: Array<ICondaStorePackage> = [];
+  hasMoreSearchPackages = false;
 
   constructor(environment?: string) {
     this.environment = environment;
@@ -436,9 +440,6 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
 
     console.log('specDeps', specDeps);
 
-    // To get all available versions of the specified dependencies
-    // we need to search the server for each dependency
-    let allAvailableVersions: Array<ICondaStorePackage> = [];
     const specPackageNames: string[] = specDeps.map(dep => {
       const [name] = dep.split('=');
       return name;
@@ -447,24 +448,22 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     // To get the version that was actually installed (as distinct from the
     // version specified/request) we ask for all of the packages in the
     // current build for the current environment
-    const { data: installedPackages } = await fetchEnvironmentPackages(
+    const installedPackages = await fetchEnvironmentPackages(
       this.baseUrl,
       namespaceName,
-      envName,
-      this.installedPage,
-      this.installedPageSize
+      envName
     );
     this.installedPackages = installedPackages;
-
-    console.log('installedPackages', installedPackages);
 
     const installedVersions = installedPackages.filter(
       pkg => specPackageNames.indexOf(pkg.name) !== -1
     );
 
-    // this.installedPackages = installedVersions;
-    const packages = this.mergeConvert(installedVersions, allAvailableVersions);
-    console.log('return packages from loadInstalledPackages');
+    const packages = this.mergeConvert(
+      installedVersions,
+      // we will get all available versions later (see addVersions)
+      []
+    );
     this.hasMoreInstalledPackages = false;
     return packages;
   }
@@ -699,13 +698,27 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   }
 
   async searchPackages(searchTerm: string): Promise<Array<Conda.IPackage>> {
-    const { data } = await fetchPackages(
+    if (!searchTerm) {
+      this.searchTerm = '';
+      return [];
+    }
+    if (searchTerm !== this.searchTerm) {
+      this.searchPage = 1;
+      this.searchMatchPackages = [];
+    }
+    this.searchTerm = searchTerm;
+
+    const { data, count, page, size } = await fetchPackages(
       this.baseUrl,
-      undefined,
-      undefined,
+      this.searchPage++,
+      100,
       searchTerm
     );
-    const searchResultSet = new Set(data.map(pkg => pkg.name));
+    this.searchMatchPackages = [...this.searchMatchPackages, ...data];
+    this.hasMoreSearchPackages = page * size < count;
+    const searchResultSet = new Set(
+      this.searchMatchPackages.map(pkg => pkg.name)
+    );
     console.log(
       'searchResultSet',
       searchResultSet,
@@ -716,7 +729,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       searchResultSet.has(pkg.name)
     );
     console.log('installedAndSearched', installedAndSearched);
-    return this.mergeConvert(installedAndSearched, data);
+    return this.mergeConvert(installedAndSearched, this.searchMatchPackages);
   }
 
   async getDependencies(

@@ -502,28 +502,46 @@ export class CondaPkgPanel extends React.Component<
    * @return {Promise<void>}
    */
   async onPkgBottomHit(): Promise<void> {
-    if (!this.state.isLoading) {
-      this.setState({
-        isLoading: true
-      });
+    if (this.state.isLoading) {
+      return;
+    }
+
+    this.setState({
+      isLoading: true
+    });
+    if (this.state.searchTerm) {
+      console.log(
+        'onPkgBottomHit, loading search packages, searchTerm',
+        this.state.searchTerm
+      );
+      const searchMatchPackages = await this._model.searchPackages?.(
+        this.state.searchTerm
+      );
+      if (searchMatchPackages !== undefined) {
+        this.setState({ searchMatchPackages });
+      }
+    } else {
       console.log('onPkgBottomHit, loading installed packages');
       const packages = await this._model.loadInstalledPackages?.();
       if (packages !== undefined) {
         this.setState({ packages });
       }
-      this.setState({
-        isLoading: false
-      });
     }
+
+    this.setState({
+      isLoading: false
+    });
   }
 
   render(): JSX.Element {
     // note: search results may be empty
     let packages: Conda.IPackage[];
+    let hasMorePackages = false;
     if (!this.state.searchTerm) {
       // empty search box? -> show installed packages
       console.log('no search term, packages = this.state.packages');
       packages = this.state.packages;
+      hasMorePackages = Boolean((this._model as any).hasMoreInstalledPackages);
     } else if (this.state.isLoadingSearch) {
       // clear the page whenever the user starts typing
       console.log('isLoadingSearch, packages = []');
@@ -532,6 +550,7 @@ export class CondaPkgPanel extends React.Component<
       // we've fetched the search results, so now show them
       console.log('done searching, packages = this.state.searchMatchPackages');
       packages = this.state.searchMatchPackages;
+      hasMorePackages = Boolean((this._model as any).hasMoreSearchPackages);
     }
 
     console.log('using package filter', this.state.activeFilter);
@@ -583,6 +602,7 @@ export class CondaPkgPanel extends React.Component<
             this.state.hasDescription && this.props.width > PANEL_SMALL_WIDTH
           }
           packages={filteredPkgs}
+          hasMorePackages={hasMorePackages}
           isLoadingVersions={this.state.isLoadingVersions}
           onPkgClick={this.handleClick}
           onPkgChange={this.handleVersionSelection}
