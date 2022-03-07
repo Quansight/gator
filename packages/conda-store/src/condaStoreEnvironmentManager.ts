@@ -6,6 +6,7 @@ import {
   fetchEnvironments,
   fetchPackages,
   fetchSpecifiedPackages,
+  ICondaStoreBuild,
   ICondaStorePackage,
   condaStoreServerStatus,
   cloneEnvironment,
@@ -16,7 +17,10 @@ import {
   addPackages,
   removeEnvironment,
   getAllPackagesMatchingSearch,
-  fetchEnvironmentPackages
+  fetchEnvironmentPackages,
+  fetchCurrentBuildId,
+  fetchBuild,
+  getFinalBuildStatus
 } from './condaStore';
 
 interface IParsedEnvironment {
@@ -106,17 +110,22 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
    * @param {string} name - <namespace>/<environment> name for new
    * environment, which will be a clone of the existing environment.
    */
-  async clone(existingName: string, name: string): Promise<void> {
+  async clone(existingName: string, name: string): Promise<string> {
     const { namespace: existingNamespace, environment: existingEnvironment } =
       parseEnvironment(existingName);
     const { namespace, environment } = parseEnvironment(name);
-    await cloneEnvironment(
+    const response = await cloneEnvironment(
       this._baseUrl,
       existingNamespace,
       existingEnvironment,
       namespace,
       environment
     );
+    const {
+      data: { build_id: buildId }
+    } = await response.json();
+    await getFinalBuildStatus(this._baseUrl, buildId);
+    return namespace ? `${namespace}/${environment}` : '';
   }
 
   /**
@@ -127,16 +136,20 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
    * @param {string} [type] - Type of environment to create; see this.environmentTypes for possible
    * values.
    */
-  async create(name: string, type?: string): Promise<void> {
+  async create(name: string, type?: string): Promise<string> {
     const { namespace, environment } = parseEnvironment(name);
     const dependencies = type === 'python3' ? ['python'] : [type];
-    await createEnvironment(
+    const response = await createEnvironment(
       this._baseUrl,
       namespace,
       environment,
       dependencies
     );
-    return;
+    const {
+      data: { build_id: buildId }
+    } = await response.json();
+    await getFinalBuildStatus(this._baseUrl, buildId);
+    return namespace ? `${namespace}/${environment}` : '';
   }
 
   get environmentChanged(): ISignal<
@@ -243,6 +256,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   searchTerm = '';
   searchMatchPackages: Array<ICondaStorePackage> = [];
   hasMoreSearchPackages = false;
+  _currentBuild: any = null;
 
   constructor(environment?: string) {
     this.environment = environment;
@@ -406,6 +420,30 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     return [];
   }
 
+  async _getBuild(env = this.environment): Promise<ICondaStoreBuild> {
+    const { namespace, environment } = parseEnvironment(env);
+    const currentBuildId = await fetchCurrentBuildId(
+      this.baseUrl,
+      namespace,
+      environment
+    );
+    if (!currentBuildId) {
+      throw new Error('Could not fetch current build id');
+    }
+
+    const currentBuild = await fetchBuild(this.baseUrl, currentBuildId);
+    if (!currentBuild) {
+      throw new Error('Could not fetch current build');
+    }
+    this._currentBuild = currentBuild;
+    return currentBuild;
+  }
+
+  async getBuildStatus(env = this.environment): Promise<string> {
+    const currentBuild = await this._getBuild(env);
+    return currentBuild.status;
+  }
+
   /**
    * Load the next page of installed packages.
    *
@@ -437,22 +475,22 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       envName
     );
 
-    console.log('specDeps', specDeps);
-
     const specPackageNames: string[] = specDeps.map(dep => {
       const [name] = dep.split('=');
       return name;
     });
+
+    const currentBuild = this._currentBuild || (await this._getBuild());
 
     // To get the version that was actually installed (as distinct from the
     // version specified/request) we ask for all of the packages in the
     // current build for the current environment
     const installedPackages = await fetchEnvironmentPackages(
       this.baseUrl,
-      namespaceName,
-      envName
+      currentBuild.id
     );
     this.installedPackages = installedPackages;
+    this.hasMoreInstalledPackages = false;
 
     const installedVersions = installedPackages.filter(
       pkg => specPackageNames.indexOf(pkg.name) !== -1
@@ -463,7 +501,6 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       // we will get all available versions later (see addVersions)
       []
     );
-    this.hasMoreInstalledPackages = false;
     return packages;
   }
 
@@ -484,7 +521,6 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
       allAvailableVersions.push(...nameEquals);
     }
     const byName = this.groupPackages(allAvailableVersions);
-    console.log('allAvailableVersions', allAvailableVersions);
     const installedPackagesWithAllVersions = installedPackages.map(pkg => {
       const allVersions = byName.get(pkg.name).map(pkg => pkg.version);
       allVersions.sort(semverCompare);
@@ -644,6 +680,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     this.availablePackages = [];
     this.hasMoreInstalledPackages = true;
     this.hasMoreAvailablePackages = true;
+    this._currentBuild = null;
 
     return this.loadInstalledPackages(environment);
   }
@@ -718,16 +755,9 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     const searchResultSet = new Set(
       this.searchMatchPackages.map(pkg => pkg.name)
     );
-    console.log(
-      'searchResultSet',
-      searchResultSet,
-      'this.installedPackages',
-      this.installedPackages
-    );
     const installedAndSearched = this.installedPackages.filter(pkg =>
       searchResultSet.has(pkg.name)
     );
-    console.log('installedAndSearched', installedAndSearched);
     return this.mergeConvert(installedAndSearched, this.searchMatchPackages);
   }
 

@@ -75,6 +75,7 @@ export interface IPkgPanelState {
   isLoadingVersions: boolean;
   isLoadingSearch: boolean;
   searchTerm: string;
+  buildStatus: string;
 }
 
 /** Top level React component for widget */
@@ -84,6 +85,7 @@ export class CondaPkgPanel extends React.Component<
 > {
   constructor(props: IPkgPanelProps) {
     super(props);
+    console.log('CondaPkgPanel constructor()');
     this.state = {
       isLoading: false,
       isApplyingChanges: false,
@@ -95,7 +97,8 @@ export class CondaPkgPanel extends React.Component<
       searchMatchPackages: [],
       selected: [],
       searchTerm: '',
-      activeFilter: PkgFilters.All
+      activeFilter: PkgFilters.All,
+      buildStatus: 'QUEUED'
     };
 
     this._model = this.props.packageManager;
@@ -112,7 +115,6 @@ export class CondaPkgPanel extends React.Component<
   }
 
   private async _updatePackages(): Promise<void> {
-    console.log('CondaPkgPanel._updatePackages');
     this.setState({
       isLoading: true,
       hasUpdate: false,
@@ -133,11 +135,16 @@ export class CondaPkgPanel extends React.Component<
       });
 
       if (this._model.addVersions) {
+        const environment = this._model.environment;
         const packagesWithAllVersions = await this._model.addVersions(packages);
-        this.setState({
-          packages: packagesWithAllVersions,
-          isLoadingVersions: false
-        });
+        // if the user has changed the environment, don't apply pending updates
+        // that pertain to previous environment
+        if (environment === this._model.environment) {
+          this.setState({
+            packages: packagesWithAllVersions,
+            isLoadingVersions: false
+          });
+        }
       }
     } catch (error) {
       if (error.message !== 'cancelled') {
@@ -162,15 +169,12 @@ export class CondaPkgPanel extends React.Component<
 
   handleClick(pkg: Conda.IPackage): void {
     if (this.state.isApplyingChanges) {
-      console.log('handleClick, isApplyingChanges = true, early return');
       return;
     }
-    console.log('pkg', JSON.stringify(pkg));
 
     const selection: Array<Conda.IPackage> = this.state.selected.filter(
       ({ name }) => name !== pkg.name
     );
-    console.log('selection', selection.length, 'state.selected', this.state.selected.length);
 
     if (pkg.version_installed) {
       if (pkg.version_installed === pkg.version_selected) {
@@ -197,17 +201,6 @@ export class CondaPkgPanel extends React.Component<
         selection.push(pkg);
       }
     }
-
-    // If the user unselects all selected packages while in the "Selected"
-    // view, we change to the default view
-    // let activeFilter = this.state.activeFilter;
-    // const shouldClearSelectedFilter =
-    //   selection.length === 0 && this.state.activeFilter === PkgFilters.Selected;
-    // if (shouldClearSelectedFilter) {
-    //   activeFilter = PkgFilters.All;
-    // }
-
-    console.log('selection after', JSON.stringify(selection));
 
     this.setState({
       selected: selection
@@ -441,8 +434,19 @@ export class CondaPkgPanel extends React.Component<
       return;
     }
 
+    const { selected, packages } = this.state;
+
+    const selectedInstalledPackages = selected.filter(
+      pkg => packages.indexOf(pkg) !== -1
+    );
+    selectedInstalledPackages.forEach(pkg => {
+      pkg.version_selected = pkg.version_installed;
+    });
+
     this.setState({
-      selected: []
+      packages: packages,
+      selected: [],
+      activeFilter: PkgFilters.All
     });
   }
 
@@ -467,31 +471,18 @@ export class CondaPkgPanel extends React.Component<
     );
     if (this._currentEnvironment !== this.props.packageManager.environment) {
       this._currentEnvironment = this.props.packageManager.environment;
-      console.log('calling updatePackages from componentDidUpdate');
-      this._updatePackages();
-    }
-  }
-
-  combinePackagesSelected(
-    packages: Array<Conda.IPackage>,
-    selected: Array<Conda.IPackage>
-  ): Array<Conda.IPackage> {
-    // Update the selected state of each package. Generate a hashmap for the lookup; then update
-    // each of the new packages with info from the list of selected packages; then convert back
-    // to an array to update state.
-    const packageMap = new Map(packages.map(pkg => [pkg.name, pkg]));
-    selected.forEach(({ name, version_installed, version_selected }) => {
-      if (packageMap.has(name)) {
-        packageMap.set(name, {
-          ...packageMap.get(name),
-          version_installed,
-          version_selected
+      console.log('will now attend to updatePackages from componentDidUpdate');
+      if (this._currentEnvironment && (this._model as any).getBuildStatus) {
+        (this._model as any).getBuildStatus().then((buildStatus: string) => {
+          this.setState({ buildStatus });
+          if (buildStatus === 'COMPLETED') {
+            this._updatePackages();
+          }
         });
-        console.log('package', name, JSON.stringify(packageMap.get(name)));
+      } else {
+        this._updatePackages();
       }
-    });
-    const updated: Array<Conda.IPackage> = Array.from(packageMap.values());
-    return updated;
+    }
   }
 
   /**
@@ -535,21 +526,29 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
+    switch (this.state.buildStatus) {
+      case 'COMPLETED':
+        break;
+      case 'FAILED':
+        return <div>The build for this environment failed.</div>;
+      case 'QUEUED':
+      case 'BUILDING':
+      default:
+        return <div>The build for this environment is pending.</div>;
+    }
+
     // note: search results may be empty
     let packages: Conda.IPackage[];
     let hasMorePackages = false;
     if (!this.state.searchTerm) {
       // empty search box? -> show installed packages
-      console.log('no search term, packages = this.state.packages');
       packages = this.state.packages;
       hasMorePackages = Boolean((this._model as any).hasMoreInstalledPackages);
     } else if (this.state.isLoadingSearch) {
       // clear the page whenever the user starts typing
-      console.log('isLoadingSearch, packages = []');
       packages = [];
     } else {
       // we've fetched the search results, so now show them
-      console.log('done searching, packages = this.state.searchMatchPackages');
       packages = this.state.searchMatchPackages;
       hasMorePackages = Boolean((this._model as any).hasMoreSearchPackages);
     }

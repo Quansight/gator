@@ -77,6 +77,7 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
   async handleCreateEnvironment(): Promise<void> {
     let toastId: React.ReactText;
     try {
+      const environmentName = this.state.currentEnvironment;
       const body = document.createElement('div');
       const nameLabel = document.createElement('label');
       nameLabel.textContent = 'Name : ';
@@ -108,14 +109,20 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
         toastId = await INotification.inProgress(
           `Creating environment ${nameInput.value}`
         );
-        await this.props.model.create(nameInput.value, typeInput.value);
+        const name = await this.props.model.create(
+          nameInput.value,
+          typeInput.value
+        );
         INotification.update({
           toastId,
           message: `Environment ${nameInput.value} has been created.`,
           type: 'success',
           autoClose: 5000
         });
-        this.setState({ currentEnvironment: nameInput.value });
+        // check that user hasn't changed environments while we were fetching
+        if (this.state.currentEnvironment === environmentName) {
+          this.setState({ currentEnvironment: name ? name : undefined });
+        }
         this.loadEnvironments();
       }
     } catch (error) {
@@ -162,15 +169,19 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
         toastId = await INotification.inProgress(
           `Cloning environment ${environmentName}`
         );
-        await this.props.model.clone(environmentName, nameInput.value);
+        const name = await this.props.model.clone(
+          environmentName,
+          nameInput.value
+        );
         INotification.update({
           toastId,
           message: `Environment ${nameInput.value} created.`,
           type: 'success',
           autoClose: 5000
         });
+        // check that user hasn't changed environments while we were fetching
         if (this.state.currentEnvironment === environmentName) {
-          this.setState({ currentEnvironment: nameInput.value });
+          this.setState({ currentEnvironment: name ? name : undefined });
         }
         this.loadEnvironments();
       }

@@ -36,14 +36,14 @@ export interface IEnvironmentManager extends IDisposable {
    * @param target name of the environment to be cloned
    * @param name name of the new environment
    */
-  clone(target: string, name: string): Promise<void>;
+  clone(target: string, name: string): Promise<string>;
   /**
    * Create a new environment
    *
    * @param name name of the new environment
    * @param type type of environment to create
    */
-  create(name: string, type?: string): Promise<void>;
+  create(name: string, type?: string): Promise<string>;
   /**
    * Signal emitted when a environment is changed.
    */

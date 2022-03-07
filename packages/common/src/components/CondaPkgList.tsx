@@ -91,7 +91,6 @@ export function CondaPkgList({
   const { observe } = useInView({
     rootMargin: '200px 0px',
     onChange: async ({ inView, unobserve, observe }) => {
-      console.log('USE IN VIEW. inView?', inView, 'hasMorePackages', hasMorePackages);
       if (hasMorePackages && inView) {
         unobserve();
         await onPkgBottomHit();
@@ -237,20 +236,8 @@ class CondaPkgView extends React.Component<IPkgListProps> {
     return <span>{pkg.name}</span>;
   };
 
-  protected versionRender = (pkg: Conda.IPackage): JSX.Element => (
-    <a
-      className={pkg.updatable ? Style.Updatable : undefined}
-      href="#"
-      onClick={(evt): void => {
-        evt.stopPropagation();
-        this.props.onPkgGraph(pkg);
-      }}
-      rel="noopener noreferrer"
-      title="Show dependency graph"
-    >
-      {pkg.version_installed}
-    </a>
-  );
+  protected versionRender = (pkg: Conda.IPackage): string =>
+    pkg.version_installed;
 
   protected rowClassName = (index: number, pkg: Conda.IPackage): string => {
     if (index >= 0) {

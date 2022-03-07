@@ -17,6 +17,22 @@ export interface ICondaStoreEnvironment {
   };
 }
 
+export enum BuildStatus {
+  QUEUED = 'QUEUED',
+  BUILDING = 'BUILDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
+export interface ICondaStoreBuild {
+  status: BuildStatus;
+  specification: {
+    spec: {
+      name: string;
+      dependencies: string[];
+    };
+  };
+}
+
 export interface ICondaStorePackage {
   name: string;
   version: string;
@@ -153,17 +169,17 @@ export async function getAllPackagesMatchingSearch(
   let hasMorePackages = true;
 
   while (hasMorePackages) {
-    console.log(
-      `fetch page ${page} of ${
-        count / size
-      } pages for search term ${term} with baseUrl ${baseUrl}`
-    );
     ({ count, data, page, size } = await fetchPackages(
       baseUrl,
       page + 1,
       size,
       term
     ));
+    console.log(
+      `fetched page ${page} of ${
+        count / size
+      } pages for search term ${term} with baseUrl ${baseUrl}`
+    );
     hasMorePackages = page * size < count;
     matches = [...matches, ...data];
   }
@@ -198,10 +214,10 @@ export async function fetchPackages(
   }
 }
 
-async function fetchCurrentBuild(
+export async function fetchBuild(
   baseUrl: string,
   buildId: number
-): Promise<any> {
+): Promise<ICondaStoreBuild> {
   const url = createApiUrl(baseUrl, `/build/${buildId}/`);
   const response = await fetch(url);
   if (response.ok) {
@@ -210,7 +226,7 @@ async function fetchCurrentBuild(
   }
 }
 
-async function fetchCurrentBuildId(
+export async function fetchCurrentBuildId(
   baseUrl: string,
   namespace: string,
   environment: string
@@ -238,27 +254,8 @@ async function fetchCurrentBuildId(
  */
 export async function fetchEnvironmentPackages(
   baseUrl: string,
-  namespace: string,
-  environment: string
+  currentBuildId: number
 ): Promise<Array<ICondaStorePackage>> {
-  if (namespace === undefined || environment === undefined) {
-    console.error(
-      `Error: invalid arguments to fetchEnvironmentPackages: envNamespace ${namespace} envName ${environment}`
-    );
-    return [];
-  }
-
-  const currentBuildId = await fetchCurrentBuildId(
-    baseUrl,
-    namespace,
-    environment
-  );
-
-  // eslint-disable-next-line eqeqeq
-  if (currentBuildId == null) {
-    return [];
-  }
-
   let packages: Array<ICondaStorePackage> = [];
   let data: Array<ICondaStorePackage>;
   let count = 1;
@@ -301,7 +298,7 @@ export async function fetchSpecifiedPackages(
     return [];
   }
 
-  const currentBuild = await fetchCurrentBuild(
+  const currentBuild = await fetchBuild(
     baseUrl,
     currentBuildId as number
   );
@@ -396,7 +393,7 @@ export async function createEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string,
-  dependencies: Array<string>
+  dependencies: Array<string>,
 ): Promise<Response> {
   const specification: ICondaStoreSpecification = {
     name: environment,
@@ -451,7 +448,7 @@ export async function cloneEnvironment(
     console.error(await response.json());
     throw new Error('Could not clone environment, see browser console.');
   }
-  return;
+  return response;
 }
 
 /**
@@ -494,7 +491,6 @@ export async function removePackages(
   environment: string,
   packages: Array<string>
 ): Promise<void> {
-  console.log('remove packages', packages);
   const specDeps = await fetchSpecifiedPackages(
     baseUrl,
     namespace,
@@ -523,27 +519,10 @@ export async function removePackages(
     data: { build_id: buildId }
   } = await response.json();
 
-  // Start checking the status of the new build. If the build succeeds, resolve
-  // the promise. If it fails, reject the promise.
-  return new Promise((resolve, reject) => {
-    const getBuildStatus = async () => {
-      const url = createApiUrl(baseUrl, `/build/${buildId}`);
-      const response = await fetch(url);
-      const {
-        data: { status }
-      } = await response.json();
-      console.log('status', status);
-      if (status === 'COMPLETED') {
-        resolve();
-      } else if (status === 'FAILED') {
-        reject(new Error('Build failed!'));
-      } else {
-        // wait a bit, then check again
-        setTimeout(getBuildStatus, 5000);
-      }
-    };
-    getBuildStatus();
-  });
+  const status = await getFinalBuildStatus(baseUrl, buildId);
+  if (status === BuildStatus.FAILED) {
+    throw new Error('Error building new environment!');
+  }
 }
 
 /**
@@ -615,8 +594,7 @@ export async function addPackages(
   namespace: string,
   environment: string,
   packages: Array<string>
-): Promise<Error | void> {
-  console.log('add packages', packages);
+): Promise<void> {
   const specDeps = await fetchSpecifiedPackages(
     baseUrl,
     namespace,
@@ -639,7 +617,7 @@ export async function addPackages(
   const nextSpec = Array.from(next).map(([name, version]) =>
     [name, version].join('=')
   );
-  console.log('nextSpec', nextSpec);
+  console.log(environment, 'nextSpec', nextSpec);
   const response = await createEnvironment(
     baseUrl,
     namespace,
@@ -650,23 +628,27 @@ export async function addPackages(
     data: { build_id: buildId }
   } = await response.json();
 
-  // Start checking the status of the new build. If the build succeeds, resolve
-  // the promise. If it fails, reject the promise.
-  return new Promise((resolve, reject) => {
+  const status = await getFinalBuildStatus(baseUrl, buildId);
+  if (status === BuildStatus.FAILED) {
+    throw new Error('Error building new environment!')
+  }
+}
+
+// Returns promise that resolves with either COMPLETED or FAILED
+export function getFinalBuildStatus(
+  baseUrl: string,
+  buildId: number,
+  waitTime = 5000
+): Promise<'COMPLETED' | 'FAILED'> {
+  return new Promise(resolve => {
     const getBuildStatus = async () => {
-      const url = createApiUrl(baseUrl, `/build/${buildId}`);
-      const response = await fetch(url);
-      const {
-        data: { status }
-      } = await response.json();
-      console.log('status', status);
-      if (status === 'COMPLETED') {
-        resolve();
-      } else if (status === 'FAILED') {
-        reject(new Error('Build failed!'));
+      const { status } = await fetchBuild(baseUrl, buildId);
+      console.log(`Build id ${buildId} status: ${status}`);
+      if (status === BuildStatus.COMPLETED || status === BuildStatus.FAILED) {
+        resolve(status);
       } else {
         // wait a bit, then check again
-        setTimeout(getBuildStatus, 5000);
+        setTimeout(getBuildStatus, waitTime);
       }
     };
     getBuildStatus();

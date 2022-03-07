@@ -186,7 +186,7 @@ export class CondaEnvironments implements IEnvironmentManager {
     }
   }
 
-  async clone(target: string, name: string): Promise<void> {
+  async clone(target: string, name: string): Promise<string> {
     try {
       const request: RequestInit = {
         body: JSON.stringify({ name, twin: target }),
@@ -205,6 +205,8 @@ export class CondaEnvironments implements IEnvironmentManager {
           type: 'clone'
         });
       }
+
+      return name;
     } catch (error) {
       let message: string = error.message || error.toString();
       if (message !== 'cancelled') {
@@ -215,7 +217,7 @@ export class CondaEnvironments implements IEnvironmentManager {
     }
   }
 
-  async create(name: string, type?: string): Promise<void> {
+  async create(name: string, type?: string): Promise<string> {
     try {
       const packages: Array<string> = this.getEnvironmentFromType(type || '');
 
@@ -235,6 +237,7 @@ export class CondaEnvironments implements IEnvironmentManager {
           type: 'create'
         });
       }
+      return name;
     } catch (error) {
       let message: string = error.message || error.toString();
       if (message !== 'cancelled') {
