@@ -129,15 +129,16 @@ export class CondaPkgPanel extends React.Component<
         packages: packages,
         hasDescription: this._model.hasDescription(),
         isLoading: false,
-        isLoadingVersions: true
+        isLoadingVersions: Boolean(this._model.addVersions)
       });
 
-      this._model.addVersions(packages).then(packagesWithAllVersions => {
+      if (this._model.addVersions) {
+        const packagesWithAllVersions = await this._model.addVersions(packages);
         this.setState({
           packages: packagesWithAllVersions,
           isLoadingVersions: false
         });
-      });
+      }
     } catch (error) {
       if (error.message !== 'cancelled') {
         this.setState({
