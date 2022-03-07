@@ -27,25 +27,24 @@ interface IParsedEnvironment {
 /**
  * Split a conda-store environment into a namespace name and environment name.
  *
- * @param {string} environment - Name of the environment in the form <namespace>/<environment>
+ * @param {string} env - Name of the environment in the form <namespace>/<environment>
  * @throws {Error} - Thrown if the environment is not defined
  * @return {IParsedEnvironment} Environment and namespace names
  */
-function parseEnvironment(environment: string): IParsedEnvironment {
-  if (environment !== undefined) {
-    const [namespaceName, environmentName] = environment.split('/', 2);
-    if (!environmentName) {
-      throw new Error(
-        'Namespace and environment must be provided together, like so: namespace/environment'
-      );
-    }
-    return {
-      environment: environmentName,
-      namespace: namespaceName
-    };
-  } else {
+function parseEnvironment(env: string): IParsedEnvironment {
+  if (env === undefined) {
     throw new Error('Environment is undefined.');
   }
+  let environment = env;
+  let namespace = null;
+  const parts = env.split('/', 2);
+  if (parts.length === 2) {
+    [namespace, environment] = parts;
+  }
+  return {
+    environment,
+    namespace
+  };
 }
 
 /**
