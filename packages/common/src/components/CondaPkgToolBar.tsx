@@ -64,7 +64,7 @@ export interface ICondaPkgToolBarProps {
   onRefreshPackages: () => void;
   filterDisabled: boolean;
   searchPlaceholder: string;
-  onToggleSelected: () => void;
+  onToggleSelected: (shouldShowSelected: boolean) => void;
 }
 
 export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
@@ -106,7 +106,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
               name="package-filter"
               type="radio"
               checked={!props.searchTerm && isShowingSelection}
-              onChange={props.onToggleSelected}
+              onChange={() => props.onToggleSelected(true)}
             />
             Selected ({props.selectionCount})
           </label>
@@ -115,7 +115,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
               name="package-filter"
               type="radio"
               checked={!props.searchTerm && !isShowingSelection}
-              onChange={props.onToggleSelected}
+              onChange={() => props.onToggleSelected(false)}
             />
             Installed
           </label>

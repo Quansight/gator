@@ -583,17 +583,12 @@ export class CondaPkgPanel extends React.Component<
           onRefreshPackages={this.handleRefreshPackages}
           filterDisabled={Boolean(this._model.loadInstalledPackages)}
           searchPlaceholder={this._model.searchLabel}
-          onToggleSelected={() => {
-            // console.log(
-            //   'setting state, searchTerm: ""',
-            //   this.state.activeFilter
-            // );
+          onToggleSelected={(shouldShowSelected: boolean) => {
             this.setState({
               searchTerm: '',
-              activeFilter:
-                this.state.activeFilter === PkgFilters.Selected
-                  ? PkgFilters.All
-                  : PkgFilters.Selected
+              activeFilter: !shouldShowSelected
+                ? PkgFilters.All
+                : PkgFilters.Selected
             });
           }}
         />
