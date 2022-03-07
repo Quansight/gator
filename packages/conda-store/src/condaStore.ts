@@ -4,7 +4,7 @@
  * Note: fetch is assumed to be global (execution environment: web browser).
  */
 
-import { parse, stringify } from 'yaml';
+import yaml from 'yaml';
 import { URLExt } from '@jupyterlab/coreutils';
 
 export interface ICondaStoreEnvironment {
@@ -392,7 +392,11 @@ export async function createEnvironment(
     name: environment,
     dependencies
   };
-  return await specifyEnvironment(baseUrl, namespace, stringify(specification));
+  return await specifyEnvironment(
+    baseUrl,
+    namespace,
+    yaml.stringify(specification)
+  );
 }
 
 /**
@@ -423,7 +427,7 @@ export async function cloneEnvironment(
 
   // Modify specification so that it uses the provided environment name
   const specificationYaml = await specificationResponse.text();
-  const specification: ICondaStoreSpecification = parse(specificationYaml);
+  const specification: ICondaStoreSpecification = yaml.parse(specificationYaml);
   specification.name = environment;
 
   // Pass specification to the API to create new environment based on the
@@ -431,7 +435,7 @@ export async function cloneEnvironment(
   const response = await specifyEnvironment(
     baseUrl,
     namespace,
-    stringify(specification)
+    yaml.stringify(specification)
   );
   if (!response.ok) {
     console.error(await response.json());
@@ -558,8 +562,30 @@ export async function exportEnvironment(
       'Could not fetch current build id while attempting to export environment'
     );
   }
-  const url = createApiUrl(baseUrl, `/build/${currentBuildId}/yaml/`);
-  return await fetch(url);
+
+  // Then get the data for the current build
+  const url = createApiUrl(baseUrl, `/build/${currentBuildId}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error(await response.text());
+    throw new Error(
+      `Could not fetch the current build while attempting to export environment. Conda Store server responded with error code ${response.status}. See browser console for error response body.`
+    );
+  }
+
+  // Then extract the spec-file data, convert to yaml, and return as response
+  const {
+    data: {
+      specification: { spec }
+    }
+  } = await response.json();
+  // TODO: create endpoint in conda store server api to return the
+  // environment's spec as yaml so we don't have to do this hack
+  // where we cast the response from json to yaml
+  const specificationYaml = yaml.stringify(spec);
+  const blob = new Blob([specificationYaml], { type: 'text/yaml' });
+  const yamlResponse = new Response(blob, response);
+  return yamlResponse;
 }
 
 /**
