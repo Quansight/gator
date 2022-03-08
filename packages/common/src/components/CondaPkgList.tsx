@@ -90,11 +90,10 @@ export function CondaPkgList({
 }): JSX.Element {
   const { observe } = useInView({
     rootMargin: '200px 0px',
-    onChange: async ({ inView, unobserve, observe }) => {
+    onChange: async ({ inView, unobserve }) => {
       if (hasMorePackages && inView) {
         unobserve();
         await onPkgBottomHit();
-        observe();
       }
     }
   });
@@ -339,7 +338,17 @@ class CondaPkgView extends React.Component<IPkgListProps> {
                   itemCount={this.props.packages.length}
                   itemData={this.props.packages}
                   itemKey={(index, data): React.Key =>
-                    data[index].name + String(index)
+                    data[index].name +
+                    // Force React to create a new DOM node if additional
+                    // package versions are added to the same row in the list
+                    // view. A new DOM node will trigger the
+                    // IntersectionObserver callback, which fixes an issue where
+                    // infinite scrolling would stop working if the next batch
+                    // of results doesn't add any new rows to the list but just
+                    // adds new versions to the dropdown of the last row. A good
+                    // example of this is the package `aws`, which has has
+                    // hundreds of versions.
+                    data[index].version.slice(-1)[0]
                   }
                   itemSize={40}
                   width={width}
