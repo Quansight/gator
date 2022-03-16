@@ -12,15 +12,14 @@ import {
   cloneEnvironment,
   createEnvironment,
   specifyEnvironment,
-  removePackages,
   exportEnvironment,
-  addPackages,
   removeEnvironment,
   getAllPackagesMatchingSearch,
   fetchEnvironmentPackages,
   fetchCurrentBuildId,
   fetchBuild,
-  getFinalBuildStatus
+  getFinalBuildStatus,
+  BuildStatus
 } from './condaStore';
 
 interface IParsedEnvironment {
@@ -702,11 +701,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
    * @returns {Promise<void>}
    */
   async install(packages: Array<string>, environment?: string): Promise<void> {
-    const { namespace, environment: environmentName } = parseEnvironment(
-      environment === undefined ? this.environment : environment
-    );
-    await addPackages(this.baseUrl, namespace, environmentName, packages);
-    return;
+    return this.changePackages([], packages, environment);
   }
 
   async develop(path: string, environment?: string): Promise<void> {
@@ -721,6 +716,69 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     return this.install(packages, environment);
   }
 
+  async changePackages(
+    toRemove: Array<string>,
+    toAddOrChange: Array<string>,
+    env?: string
+  ): Promise<void> {
+    const { namespace, environment } = parseEnvironment(
+      env === undefined ? this.environment : env
+    );
+    const baseUrl = this.baseUrl;
+
+    // Get array of the dependencies in the environment's specification file (environment.yaml)
+    const specDeps = await fetchSpecifiedPackages(
+      baseUrl,
+      namespace,
+      environment
+    );
+    // deps is an array like: ['python', 'python=3.9', 'nodejs=16.4.1']
+    const mapNameToVersion = (deps: string[]) =>
+      new Map(
+        deps.map(dep => {
+          const [name, version = ''] = dep.split('=');
+          return [name, version];
+        })
+      );
+
+    // Create a {name: version} map in order to more easily modify
+    const next = mapNameToVersion(specDeps);
+
+    // Modify map with additions/updates
+    mapNameToVersion(toAddOrChange).forEach((version, name) => {
+      next.set(name, version);
+    });
+
+    // Modify map with removals
+    toRemove.forEach(name => {
+      next.delete(name);
+    });
+
+    // Generate final array of dependencies
+    const nextSpecDeps = Array.from(next).map(([name, version]) =>
+      version ? `${name}=${version}` : `${name}`
+    );
+
+    console.log(environment, 'nextSpecDeps', nextSpecDeps);
+
+    // Build environment from new set of dependencies
+    const response = await createEnvironment(
+      baseUrl,
+      namespace,
+      environment,
+      nextSpecDeps
+    );
+    const {
+      data: { build_id: buildId }
+    } = await response.json();
+
+    // Wait for build to finish or fail before returning
+    const status = await getFinalBuildStatus(baseUrl, buildId);
+    if (status === BuildStatus.FAILED) {
+      throw new Error('Error building new environment!');
+    }
+  }
+
   /**
    * Remove packages from an environment.
    *
@@ -729,8 +787,7 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
    * @param {string} [environment] - Namespace/environment to be modified
    */
   async remove(packages: Array<string>, environment?: string): Promise<void> {
-    const { namespace, environment: envName } = parseEnvironment(environment);
-    await removePackages(this.baseUrl, namespace, envName, packages);
+    await this.changePackages(packages, [], environment);
   }
 
   async searchPackages(searchTerm: string): Promise<Array<Conda.IPackage>> {

@@ -227,6 +227,11 @@ export namespace Conda {
       environment?: string
     ) => Promise<Array<Conda.IPackage>>;
     searchLabel?: string;
+    changePackages?: (
+      toRemove: string[],
+      toAddOrChange: string[],
+      env: string
+    ) => Promise<void>;
   }
 
   /**

@@ -396,7 +396,7 @@ export async function createEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string,
-  dependencies: Array<string>,
+  dependencies: Array<string>
 ): Promise<Response> {
   const specification: ICondaStoreSpecification = {
     name: environment,
@@ -479,56 +479,6 @@ export async function removeEnvironment(
 }
 
 /**
- * Remove one or more packages from an environment.
- *
- * @async
- * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
- * @param {string} namespace - Namespace in which the environment resides
- * @param {string} environment - Environment for which packages are to be removed
- * @param {Array<string>} packages - Packages to remove
- * @returns {Promise<void>}
- */
-export async function removePackages(
-  baseUrl: string,
-  namespace: string,
-  environment: string,
-  packages: Array<string>
-): Promise<void> {
-  const specDeps = await fetchSpecifiedPackages(
-    baseUrl,
-    namespace,
-    environment
-  );
-  const toDelete = new Map(
-    packages.map(pkg => {
-      const [name, version = ''] = pkg.split('=');
-      return [name, version];
-    })
-  );
-  // Reconstruct the specification for the current environment, minus the packages to delete
-  const nextSpecDeps = specDeps
-    .map(dep => dep.split('='))
-    .filter(([name, version]) => !toDelete.has(name))
-    .map(([name, version]) => [name, version].join('='));
-
-  const response = await createEnvironment(
-    baseUrl,
-    namespace,
-    environment,
-    nextSpecDeps
-  );
-
-  const {
-    data: { build_id: buildId }
-  } = await response.json();
-
-  const status = await getFinalBuildStatus(baseUrl, buildId);
-  if (status === BuildStatus.FAILED) {
-    throw new Error('Error building new environment!');
-  }
-}
-
-/**
  * Export an environment as a yaml file.
  *
  * @async
@@ -578,63 +528,6 @@ export async function exportEnvironment(
   const blob = new Blob([specificationYaml], { type: 'text/yaml' });
   const yamlResponse = new Response(blob, response);
   return yamlResponse;
-}
-
-/**
- * Add packages to an environment.
- *
- * If a package already exists in the environment, no change will be made to that package.
- *
- * @async
- * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
- * @param {string} namespace - Namespace into which the environment resides.
- * @param {string} environment - Name of the environment.
- * @param {Array<string>} packages - List of packages in "name=version" format to add to the environment.
- * @returns {Promise<void>}
- */
-export async function addPackages(
-  baseUrl: string,
-  namespace: string,
-  environment: string,
-  packages: Array<string>
-): Promise<void> {
-  const specDeps = await fetchSpecifiedPackages(
-    baseUrl,
-    namespace,
-    environment
-  );
-
-  // Generate a specification for the new environment including the installed as well as new packages
-  const nameToVersion = (deps: string[]) =>
-    new Map(
-      deps.map(dep => {
-        const [name, version = ''] = dep.split('=');
-        return [name, version];
-      })
-    );
-  const requested = nameToVersion(packages);
-  const next = nameToVersion(specDeps);
-  requested.forEach((version, name) => {
-    next.set(name, version);
-  });
-  const nextSpec = Array.from(next).map(([name, version]) =>
-    [name, version].join('=')
-  );
-  console.log(environment, 'nextSpec', nextSpec);
-  const response = await createEnvironment(
-    baseUrl,
-    namespace,
-    environment,
-    nextSpec
-  );
-  const {
-    data: { build_id: buildId }
-  } = await response.json();
-
-  const status = await getFinalBuildStatus(baseUrl, buildId);
-  if (status === BuildStatus.FAILED) {
-    throw new Error('Error building new environment!')
-  }
 }
 
 // Returns promise that resolves with either COMPLETED or FAILED

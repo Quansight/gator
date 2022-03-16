@@ -370,28 +370,42 @@ export class CondaPkgPanel extends React.Component<
           }
         });
 
-        if (toRemove.length > 0) {
+        // Conda Store does all updates (add, remove, change version) in one call
+        if (this._model.changePackages) {
           await INotification.update({
             toastId,
-            message: 'Removing selected packages'
+            message: 'Sending package actions to server'
           });
-          await this._model.remove(toRemove, this._currentEnvironment);
-        }
+          await this._model.changePackages(
+            toRemove,
+            [...toUpdate, ...toInstall],
+            this._currentEnvironment
+          );
+        } else {
+          // Whereas traditional Conda does these updates in stages
+          if (toRemove.length > 0) {
+            await INotification.update({
+              toastId,
+              message: 'Removing selected packages'
+            });
+            await this._model.remove(toRemove, this._currentEnvironment);
+          }
 
-        if (toUpdate.length > 0) {
-          await INotification.update({
-            toastId,
-            message: 'Updating selected packages'
-          });
-          await this._model.update(toUpdate, this._currentEnvironment);
-        }
+          if (toUpdate.length > 0) {
+            await INotification.update({
+              toastId,
+              message: 'Updating selected packages'
+            });
+            await this._model.update(toUpdate, this._currentEnvironment);
+          }
 
-        if (toInstall.length > 0) {
-          await INotification.update({
-            toastId,
-            message: 'Installing new packages'
-          });
-          await this._model.install(toInstall, this._currentEnvironment);
+          if (toInstall.length > 0) {
+            await INotification.update({
+              toastId,
+              message: 'Installing new packages'
+            });
+            await this._model.install(toInstall, this._currentEnvironment);
+          }
         }
 
         INotification.update({
