@@ -444,7 +444,6 @@ export class CondaPkgPanel extends React.Component<
     });
 
     this.setState({
-      packages: packages,
       selected: [],
       activeFilter: PkgFilters.All
     });
