@@ -173,7 +173,8 @@ export async function getAllPackagesMatchingSearch(
       baseUrl,
       page + 1,
       size,
-      term
+      term,
+      true
     ));
     console.log(
       `fetched page ${page} of ${
@@ -199,12 +200,14 @@ export async function fetchPackages(
   baseUrl: string,
   page = 1,
   size = 100,
-  search = ''
+  search = '',
+  isExact = false
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
   const url = createApiUrl(
     baseUrl,
     `/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name` +
-      (search ? `&search=${search}` : '')
+      (search ? `&search=${encodeURIComponent(search)}` : '') +
+      (isExact ? '&exact=1' : '')
   );
   const response = await fetch(url);
   if (response.ok) {
