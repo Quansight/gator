@@ -530,11 +530,32 @@ export class CondaPkgPanel extends React.Component<
       case 'COMPLETED':
         break;
       case 'FAILED':
-        return <div>The build for this environment failed.</div>;
+        return (
+          <Panel>
+            <div className={Style.ErrorDiv}>
+              The build for this environment failed. Please visit{' '}
+              <a
+                href={(this._model as any).getCondaStoreWebAppUrl()}
+                className={Style.Link}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {this._model.environment}
+              </a>{' '}
+              in the Conda Store web app to rebuild.
+            </div>
+          </Panel>
+        );
       case 'QUEUED':
       case 'BUILDING':
       default:
-        return <div>The build for this environment is pending.</div>;
+        return (
+          <Panel>
+            <div className={Style.ErrorDiv}>
+              The build for this environment is pending.
+            </div>
+          </Panel>
+        );
     }
 
     // note: search results may be empty
@@ -567,7 +588,7 @@ export class CondaPkgPanel extends React.Component<
     }
 
     return (
-      <div className={Style.Panel}>
+      <Panel>
         <CondaPkgToolBar
           isPending={this.state.isLoading || this.state.isLoadingSearch}
           category={this.state.activeFilter}
@@ -604,7 +625,7 @@ export class CondaPkgPanel extends React.Component<
           onPkgGraph={this.handleDependenciesGraph}
           onPkgBottomHit={this.onPkgBottomHit}
         />
-      </div>
+      </Panel>
     );
   }
 
@@ -612,9 +633,22 @@ export class CondaPkgPanel extends React.Component<
   private _currentEnvironment = '';
 }
 
+function Panel({ children }: { children: React.ReactNode }) {
+  return <div className={Style.Panel}>{children}</div>;
+}
+
 namespace Style {
   export const Panel = style({
     flexGrow: 1,
     borderLeft: '1px solid var(--jp-border-color2)'
+  });
+
+  export const ErrorDiv = style({
+    margin: '20px 0 0 20px'
+  });
+
+  export const Link = style({
+    textDecoration: 'underline',
+    color: 'var(--jp-content-link-color)'
   });
 }

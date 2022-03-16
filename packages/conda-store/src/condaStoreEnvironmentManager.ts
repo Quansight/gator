@@ -767,4 +767,8 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
   ): Promise<Conda.IPackageDeps> {
     return;
   }
+
+  getCondaStoreWebAppUrl(): string {
+    return `${this.baseUrl}/environment/${this.environment}`;
+  }
 }
