@@ -31,6 +31,7 @@ export interface IPkgPanelProps {
    * Package manager for the selected environment
    */
   packageManager: Conda.IPackageManager;
+  onCreateEnvironment: () => Promise<void>;
 }
 
 /**
@@ -540,6 +541,20 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
+    if (!this.props.packageManager.environment) {
+      return (
+        <Panel>
+          <div className={Style.ErrorDiv}>
+            To begin,{' '}
+            <button onClick={this.props.onCreateEnvironment}>
+              + create a new environment
+            </button>
+            .
+          </div>
+        </Panel>
+      );
+    }
+
     switch (this.state.buildStatus) {
       case 'COMPLETED':
         break;

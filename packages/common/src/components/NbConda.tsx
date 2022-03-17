@@ -378,7 +378,7 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
             newState.environments.find(env => env.is_default) ||
             // in case no environment is_default just load the first environment
             newState.environments[0];
-          newState.currentEnvironment = defaultEnvironment.name;
+          newState.currentEnvironment = defaultEnvironment && defaultEnvironment.name;
           newState.channels = await this.props.model.getChannels(
             newState.currentEnvironment
           );
@@ -421,6 +421,7 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
           packageManager={this.props.model.getPackageManager(
             this.state.currentEnvironment
           )}
+          onCreateEnvironment={this.handleCreateEnvironment}
         />
       </div>
     );
