@@ -374,7 +374,7 @@ export class CondaPkgPanel extends React.Component<
         if (this._model.changePackages) {
           await INotification.update({
             toastId,
-            message: 'Sending package actions to server'
+            message: 'Building new environment on server'
           });
           await this._model.changePackages(
             toRemove,
