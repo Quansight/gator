@@ -485,6 +485,7 @@ export class CondaPkgPanel extends React.Component<
     if (this._currentEnvironment !== this.props.packageManager.environment) {
       this._currentEnvironment = this.props.packageManager.environment;
       console.log('will now attend to updatePackages from componentDidUpdate');
+      this.setState({ activeFilter: PkgFilters.All });
       if (this._currentEnvironment && (this._model as any).getBuildStatus) {
         (this._model as any).getBuildStatus().then((buildStatus: string) => {
           this.setState({ buildStatus });
