@@ -531,11 +531,12 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
           allVersions[allVersions.length - 1]
         ) === -1;
 
-      return {
-        ...pkg,
-        updatable,
-        version: allVersions
-      };
+      // yes it's a little weird to mutate the pkg, but it's necessary
+      // to prevent the multiple arrays that contain these packages to get
+      // out of sync
+      pkg.updatable = updatable;
+      pkg.version = allVersions;
+      return pkg;
     });
     return installedPackagesWithAllVersions;
   }

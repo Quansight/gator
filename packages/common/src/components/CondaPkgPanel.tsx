@@ -172,26 +172,32 @@ export class CondaPkgPanel extends React.Component<
     if (this.state.isApplyingChanges) {
       return;
     }
+    const selection: Array<Conda.IPackage> = [...this.state.selected];
 
-    const selection: Array<Conda.IPackage> = this.state.selected.filter(
-      ({ name }) => name !== pkg.name
+    let spliceIndex = this.state.selected.findIndex(
+      ({ name }) => name === pkg.name
     );
+    if (spliceIndex > -1) {
+      selection.splice(spliceIndex, 1);
+    } else {
+      spliceIndex = 0;
+    }
 
     if (pkg.version_installed) {
       if (pkg.version_installed === pkg.version_selected) {
         if (pkg.updatable) {
           pkg.version_selected = ''; // Set for update
-          selection.push(pkg);
+          selection.splice(spliceIndex, 0, pkg);
         } else {
           pkg.version_selected = 'none'; // Set for removal
-          selection.push(pkg);
+          selection.splice(spliceIndex, 0, pkg);
         }
       } else {
         if (pkg.version_selected === 'none') {
           pkg.version_selected = pkg.version_installed;
         } else {
           pkg.version_selected = 'none'; // Set for removal
-          selection.push(pkg);
+          selection.splice(spliceIndex, 0, pkg);
         }
       }
     } else {
@@ -199,7 +205,7 @@ export class CondaPkgPanel extends React.Component<
         pkg.version_selected = 'none'; // Unselect
       } else {
         pkg.version_selected = ''; // Select 'Any'
-        selection.push(pkg);
+        selection.splice(spliceIndex, 0, pkg);
       }
     }
 
@@ -212,20 +218,26 @@ export class CondaPkgPanel extends React.Component<
     if (this.state.isApplyingChanges) {
       return;
     }
-
     console.log('handleVersionSelection', pkg, version);
 
-    const selection = this.state.selected.filter(
-      ({ name }) => name !== pkg.name
+    const selection: Array<Conda.IPackage> = [...this.state.selected];
+
+    let spliceIndex = this.state.selected.findIndex(
+      ({ name }) => name === pkg.name
     );
+    if (spliceIndex > -1) {
+      selection.splice(spliceIndex, 1);
+    } else {
+      spliceIndex = 0;
+    }
 
     if (pkg.version_installed) {
       if (pkg.version_installed !== version) {
-        selection.push(pkg);
+        selection.splice(spliceIndex, 0, pkg);
       }
     } else {
       if (version !== 'none') {
-        selection.push(pkg);
+        selection.splice(spliceIndex, 0, pkg);
       }
     }
 
@@ -261,9 +273,14 @@ export class CondaPkgPanel extends React.Component<
     this.searchOnceUserHasStoppedTyping(searchTerm);
   }
   searchOnceUserHasStoppedTyping = debounce(async (searchTerm: string) => {
-    const searchMatchPackages = await this._model.searchPackages(searchTerm);
+    const searchMatchPackages = await this.searchPackages(searchTerm);
     this.setState({ searchMatchPackages, isLoadingSearch: false });
   }, 1000);
+
+  async searchPackages(searchTerm: string): Promise<Conda.IPackage[]> {
+    const searchMatchPackages = await this._model.searchPackages(searchTerm);
+    return searchMatchPackages;
+  }
 
   async handleUpdateAll(): Promise<void> {
     if (this.state.isApplyingChanges) {
@@ -521,12 +538,10 @@ export class CondaPkgPanel extends React.Component<
         'onPkgBottomHit, loading search packages, searchTerm',
         this.state.searchTerm
       );
-      const searchMatchPackages = await this._model.searchPackages?.(
+      const searchMatchPackages = await this.searchPackages(
         this.state.searchTerm
       );
-      if (searchMatchPackages !== undefined) {
-        this.setState({ searchMatchPackages });
-      }
+      this.setState({ searchMatchPackages });
     } else {
       console.log('onPkgBottomHit, loading installed packages');
       const packages = await this._model.loadInstalledPackages?.();
@@ -537,6 +552,28 @@ export class CondaPkgPanel extends React.Component<
 
     this.setState({
       isLoading: false
+    });
+  }
+
+  combinePackagesSelected(
+    packages: Array<Conda.IPackage>,
+    selected: Array<Conda.IPackage>
+  ): Array<Conda.IPackage> {
+    // Update the selected state of each package
+    return packages.map(pkg => {
+      const selectedPackage = this.state.selected.find(
+        ({ name }) => name === pkg.name
+      );
+      if (selectedPackage) {
+        // yes it's a little weird to mutate the pkg, but it's necessary
+        // to prevent the multiple arrays that contain these packages to get
+        // out of sync
+        pkg.version_installed = selectedPackage.version_installed;
+        pkg.version_selected = selectedPackage.version_selected;
+      } else if (pkg.version_installed) {
+        pkg.version_selected = pkg.version_installed;
+      }
+      return pkg;
     });
   }
 
@@ -605,7 +642,10 @@ export class CondaPkgPanel extends React.Component<
 
     console.log('using package filter', this.state.activeFilter);
 
-    let filteredPkgs = packages;
+    let filteredPkgs = this.combinePackagesSelected(
+      packages,
+      this.state.selected
+    );
     if (this.state.activeFilter === PkgFilters.Installed) {
       filteredPkgs = filteredPkgs.filter(pkg => pkg.version_installed);
     } else if (this.state.activeFilter === PkgFilters.Available) {

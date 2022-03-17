@@ -301,10 +301,7 @@ export async function fetchSpecifiedPackages(
     return [];
   }
 
-  const currentBuild = await fetchBuild(
-    baseUrl,
-    currentBuildId as number
-  );
+  const currentBuild = await fetchBuild(baseUrl, currentBuildId as number);
 
   if (currentBuild === undefined) {
     return [];
