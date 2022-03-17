@@ -31,7 +31,6 @@ export interface IPkgPanelProps {
    * Package manager for the selected environment
    */
   packageManager: Conda.IPackageManager;
-  onCreateEnvironment: () => Promise<void>;
 }
 
 /**
@@ -99,7 +98,7 @@ export class CondaPkgPanel extends React.Component<
       selected: [],
       searchTerm: '',
       activeFilter: PkgFilters.All,
-      buildStatus: 'QUEUED'
+      buildStatus: ''
     };
 
     this._model = this.props.packageManager;
@@ -578,20 +577,6 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
-    if (!this.props.packageManager.environment) {
-      return (
-        <Panel>
-          <div className={Style.ErrorDiv}>
-            To begin,{' '}
-            <button onClick={this.props.onCreateEnvironment}>
-              + create a new environment
-            </button>
-            .
-          </div>
-        </Panel>
-      );
-    }
-
     switch (this.state.buildStatus) {
       case 'COMPLETED':
         break;
@@ -614,14 +599,17 @@ export class CondaPkgPanel extends React.Component<
         );
       case 'QUEUED':
       case 'BUILDING':
-      default:
         return (
           <Panel>
             <div className={Style.ErrorDiv}>
-              The build for this environment is pending.
+              The build for this environment is pending. Come back in a few.
             </div>
           </Panel>
         );
+      case '':
+        return <Panel />;
+      default:
+        break;
     }
 
     // note: search results may be empty
@@ -702,7 +690,7 @@ export class CondaPkgPanel extends React.Component<
   private _currentEnvironment = '';
 }
 
-function Panel({ children }: { children: React.ReactNode }) {
+function Panel({ children }: { children?: React.ReactNode }) {
   return <div className={Style.Panel}>{children}</div>;
 }
 

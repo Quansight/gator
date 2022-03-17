@@ -421,7 +421,6 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
           packageManager={this.props.model.getPackageManager(
             this.state.currentEnvironment
           )}
-          onCreateEnvironment={this.handleCreateEnvironment}
         />
       </div>
     );

@@ -99,7 +99,11 @@ export const CondaEnvList: React.FunctionComponent<IEnvListProps> = (
           props.height - ENVIRONMENT_TOOLBAR_HEIGHT - 32
         )}
       >
-        {listItems}
+        {props.isPending || listItems.length ? (
+          listItems
+        ) : (
+          <span>To begin, click the + button above.</span>
+        )}
       </div>
     </div>
   );
