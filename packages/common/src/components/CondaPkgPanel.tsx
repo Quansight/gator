@@ -577,6 +577,16 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
+    const condaStoreWebAppEnvLink = (
+      <a
+        href={(this._model as any).getCondaStoreWebAppUrl()}
+        className={Style.Link}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {this._model.environment}
+      </a>
+    );
     switch (this.state.buildStatus) {
       case 'COMPLETED':
         break;
@@ -585,15 +595,8 @@ export class CondaPkgPanel extends React.Component<
           <Panel>
             <div className={Style.ErrorDiv}>
               The build for this environment failed. Please visit{' '}
-              <a
-                href={(this._model as any).getCondaStoreWebAppUrl()}
-                className={Style.Link}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {this._model.environment}
-              </a>{' '}
-              in the Conda Store web app to rebuild.
+              {condaStoreWebAppEnvLink} in the Conda Store web app to check on
+              it.
             </div>
           </Panel>
         );
@@ -602,7 +605,9 @@ export class CondaPkgPanel extends React.Component<
         return (
           <Panel>
             <div className={Style.ErrorDiv}>
-              The build for this environment is pending. Come back in a few.
+              The build for this environment is pending. Come back in a few, or
+              visit {condaStoreWebAppEnvLink} in the Conda Store web app to
+              check on it.
             </div>
           </Panel>
         );
