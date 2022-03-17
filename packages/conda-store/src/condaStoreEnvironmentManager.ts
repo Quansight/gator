@@ -523,8 +523,17 @@ export class CondaStorePackageManager implements Conda.IPackageManager {
     const installedPackagesWithAllVersions = installedPackages.map(pkg => {
       const allVersions = byName.get(pkg.name).map(pkg => pkg.version);
       allVersions.sort(semverCompare);
+
+      const updatable =
+        allVersions.length > 0 &&
+        this.compareVersions(
+          pkg.version_installed,
+          allVersions[allVersions.length - 1]
+        ) === -1;
+
       return {
         ...pkg,
+        updatable,
         version: allVersions
       };
     });

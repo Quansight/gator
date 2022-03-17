@@ -235,8 +235,11 @@ class CondaPkgView extends React.Component<IPkgListProps> {
     return <span>{pkg.name}</span>;
   };
 
-  protected versionRender = (pkg: Conda.IPackage): string =>
-    pkg.version_installed;
+  protected versionRender = (pkg: Conda.IPackage): JSX.Element => (
+    <span className={pkg.updatable ? Style.Updatable : undefined}>
+      {pkg.version_installed}
+    </span>
+  );
 
   protected rowClassName = (index: number, pkg: Conda.IPackage): string => {
     if (index >= 0) {
