@@ -51,7 +51,7 @@ function parseEnvironment(env: string): IParsedEnvironment {
   };
 }
 
-async function throwResponseError(response: Response, errorPrefix: string) {
+async function getResponseError(response: Response, errorPrefix: string) {
   let errorMessage;
   try {
     const json = await response.json();
@@ -59,7 +59,7 @@ async function throwResponseError(response: Response, errorPrefix: string) {
   } catch (err) {
     errorMessage = response.statusText;
   }
-  throw new Error(`${errorPrefix} ${errorMessage ? ':' + errorMessage : ''}`);
+  return new Error(`${errorPrefix}${errorMessage ? ': ' + errorMessage : ''}`);
 }
 
 /**
@@ -146,7 +146,7 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       environment
     );
     if (!response.ok) {
-      throwResponseError(response, 'Could not clone environment');
+      throw await getResponseError(response, 'Could not clone environment');
     }
     const {
       data: { build_id: buildId }
@@ -173,7 +173,7 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       dependencies
     );
     if (!response.ok) {
-      throwResponseError(response, 'Could not create environment');
+      throw await getResponseError(response, 'Could not create environment');
     }
     const {
       data: { build_id: buildId }
@@ -244,7 +244,7 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       environment
     );
     if (!response.ok) {
-      throwResponseError(response, 'Could not remove environment');
+      throw await getResponseError(response, 'Could not remove environment');
     }
   }
 
