@@ -51,6 +51,17 @@ function parseEnvironment(env: string): IParsedEnvironment {
   };
 }
 
+async function throwResponseError(response: Response, errorPrefix: string) {
+  let errorMessage;
+  try {
+    const json = await response.json();
+    errorMessage = json.message;
+  } catch (err) {
+    errorMessage = response.statusText;
+  }
+  throw new Error(`${errorPrefix} ${errorMessage ? ':' + errorMessage : ''}`);
+}
+
 /**
  * Model for managing conda-store environments.
  * @implements IEnvironmentManager
@@ -134,6 +145,9 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       namespace,
       environment
     );
+    if (!response.ok) {
+      throwResponseError(response, 'Could not clone environment');
+    }
     const {
       data: { build_id: buildId }
     } = await response.json();
@@ -158,6 +172,9 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       environment,
       dependencies
     );
+    if (!response.ok) {
+      throwResponseError(response, 'Could not create environment');
+    }
     const {
       data: { build_id: buildId }
     } = await response.json();
@@ -221,8 +238,14 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
    */
   async remove(name: string): Promise<void> {
     const { namespace, environment } = parseEnvironment(name);
-    await removeEnvironment(this._baseUrl, namespace, environment);
-    return;
+    const response = await removeEnvironment(
+      this._baseUrl,
+      namespace,
+      environment
+    );
+    if (!response.ok) {
+      throwResponseError(response, 'Could not remove environment');
+    }
   }
 
   get isDisposed(): boolean {

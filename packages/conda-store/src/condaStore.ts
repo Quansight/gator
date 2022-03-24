@@ -363,13 +363,13 @@ export async function fetchChannels(
  * dependencies
  * @returns {Promise<Response>}
  */
-export async function specifyEnvironment(
+export function specifyEnvironment(
   baseUrl: string,
   namespace: string,
   specification: string
 ): Promise<Response> {
   const url = createApiUrl(baseUrl, '/specification/');
-  return await fetch(url, {
+  return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -389,7 +389,7 @@ export async function specifyEnvironment(
  * @param {Array<string>} dependencies - List of string package names to be added to the spec.
  * @returns {Promise<void>}
  */
-export async function createEnvironment(
+export function createEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string,
@@ -399,11 +399,7 @@ export async function createEnvironment(
     name: environment,
     dependencies
   };
-  return await specifyEnvironment(
-    baseUrl,
-    namespace,
-    yaml.stringify(specification)
-  );
+  return specifyEnvironment(baseUrl, namespace, yaml.stringify(specification));
 }
 
 /**
@@ -439,16 +435,7 @@ export async function cloneEnvironment(
 
   // Pass specification to the API to create new environment based on the
   // provided existiing environment
-  const response = await specifyEnvironment(
-    baseUrl,
-    namespace,
-    yaml.stringify(specification)
-  );
-  if (!response.ok) {
-    console.error(await response.json());
-    throw new Error('Could not clone environment, see browser console.');
-  }
-  return response;
+  return specifyEnvironment(baseUrl, namespace, yaml.stringify(specification));
 }
 
 /**
@@ -458,21 +445,20 @@ export async function cloneEnvironment(
  * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
  * @param {string} namespace - Namespace the environment belongs to.
  * @param {string} environment - Name of the environment.
- * @returns {Promise<void>}
+ * @returns {Promise<Response>}
  */
-export async function removeEnvironment(
+export function removeEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string
-): Promise<void> {
+): Promise<Response> {
   const url = createApiUrl(
     baseUrl,
     `/environment/${namespace}/${environment}/`
   );
-  await fetch(url, {
+  return fetch(url, {
     method: 'DELETE'
   });
-  return;
 }
 
 /**
