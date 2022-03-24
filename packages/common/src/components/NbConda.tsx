@@ -45,6 +45,8 @@ export interface ICondaEnvState {
    * Is the environment list loading?
    */
   isLoading: boolean;
+  isLoadingLogin: boolean;
+  isLoggedIn: boolean;
 }
 
 /** Top level React component for Jupyter Conda Manager */
@@ -55,7 +57,9 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
     this.state = {
       environments: [],
       currentEnvironment: undefined,
-      isLoading: false
+      isLoading: false,
+      isLoadingLogin: false,
+      isLoggedIn: false
     };
 
     this.handleEnvironmentChange = this.handleEnvironmentChange.bind(this);
@@ -378,7 +382,8 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
             newState.environments.find(env => env.is_default) ||
             // in case no environment is_default just load the first environment
             newState.environments[0];
-          newState.currentEnvironment = defaultEnvironment && defaultEnvironment.name;
+          newState.currentEnvironment =
+            defaultEnvironment && defaultEnvironment.name;
           newState.channels = await this.props.model.getChannels(
             newState.currentEnvironment
           );
@@ -395,11 +400,45 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
     }
   }
 
+  async checkLoggedIn(): Promise<void> {
+    if (this.state.isLoadingLogin) {
+      return;
+    }
+    this.setState({ isLoadingLogin: true });
+    const isLoggedIn = await (this.props.model as any).isLoggedIn();
+    this.setState({
+      isLoadingLogin: false,
+      isLoggedIn
+    });
+  }
+
   componentDidMount(): void {
     this.loadEnvironments();
+    this.checkLoggedIn();
   }
 
   render(): JSX.Element {
+    if (this.state.isLoadingLogin) {
+      return <div className={Style.Panel} />;
+    } else if (!this.state.isLoggedIn) {
+      return (
+        <div className={Style.Panel}>
+          <div className={Style.NotLoggedIn}>
+            Oops, you are not logged in to Conda Store. Please{' '}
+            <a
+              className={Style.Link}
+              href={(this.props.model as any).loginUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              open a new tab to log in to Conda Store
+            </a>
+            , then come back to this tab and refresh the page.
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={Style.Panel}>
         <CondaEnvList
@@ -433,5 +472,20 @@ namespace Style {
     display: 'flex',
     flexDirection: 'row',
     borderCollapse: 'collapse'
+  });
+
+  const linkStyle = {
+    color: 'var(--jp-content-link-color)',
+    textDecoration: 'underline'
+  };
+  export const Link = style({
+    ...linkStyle,
+    $nest: {
+      '&:hover': { ...linkStyle }
+    }
+  });
+
+  export const NotLoggedIn = style({
+    margin: '20px 0 0 20px'
   });
 }

@@ -19,7 +19,8 @@ import {
   fetchCurrentBuildId,
   fetchBuild,
   getFinalBuildStatus,
-  BuildStatus
+  BuildStatus,
+  fetchPermissions
 } from './condaStore';
 
 interface IParsedEnvironment {
@@ -62,6 +63,19 @@ export class CondaStoreEnvironmentManager implements IEnvironmentManager {
       settings.changed.connect(this.updateSettings, this);
     }
     return;
+  }
+
+  get loginUrl(): string {
+    return this._baseUrl + '/login';
+  }
+
+  async isLoggedIn(): Promise<boolean> {
+    const response = await fetchPermissions(this._baseUrl);
+    if (!response.ok) {
+      return false;
+    }
+    const json = await response.json();
+    return Boolean(json?.data?.authenticated);
   }
 
   async getServerStatus(): Promise<string> {

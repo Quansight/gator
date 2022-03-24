@@ -547,3 +547,8 @@ export function getFinalBuildStatus(
     getBuildStatus();
   });
 }
+
+export function fetchPermissions(baseUrl: string): Promise<Response> {
+  const url = createApiUrl(baseUrl, '/permission/');
+  return fetch(url);
+}
