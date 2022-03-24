@@ -577,6 +577,26 @@ export class CondaPkgPanel extends React.Component<
   }
 
   render(): JSX.Element {
+    const isHelpSelected = this._model.environment === '';
+    if (isHelpSelected) {
+      return (
+        <Panel>
+          <div className={Style.ErrorDiv}>
+            Having trouble with this JupyterLab extension? You may have better
+            luck with the{' '}
+            <a
+              className={Style.Link}
+              href={(this._model as any).baseUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Conda Store web app.
+            </a>
+          </div>
+        </Panel>
+      );
+    }
+
     const condaStoreWebAppEnvLink = (
       <a
         href={(this._model as any).getCondaStoreWebAppUrl()}
@@ -615,25 +635,6 @@ export class CondaPkgPanel extends React.Component<
         return <Panel />;
       default:
         break;
-    }
-
-    if (this._model.environment === '') {
-      return (
-        <Panel>
-          <div className={Style.ErrorDiv}>
-            Having trouble with this JupyterLab extension? You may have better
-            luck with the{' '}
-            <a
-              className={Style.Link}
-              href={(this._model as any).baseUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Conda Store web app.
-            </a>
-          </div>
-        </Panel>
-      );
     }
 
     // note: search results may be empty
