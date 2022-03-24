@@ -617,6 +617,25 @@ export class CondaPkgPanel extends React.Component<
         break;
     }
 
+    if (this._model.environment === '') {
+      return (
+        <Panel>
+          <div className={Style.ErrorDiv}>
+            Having trouble with this JupyterLab extension? You may have better
+            luck with the{' '}
+            <a
+              className={Style.Link}
+              href={(this._model as any).baseUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Conda Store web app.
+            </a>
+          </div>
+        </Panel>
+      );
+    }
+
     // note: search results may be empty
     let packages: Conda.IPackage[];
     let hasMorePackages = false;
@@ -709,8 +728,14 @@ namespace Style {
     margin: '20px 0 0 20px'
   });
 
+  const linkStyle = {
+    color: 'var(--jp-content-link-color)',
+    textDecoration: 'underline'
+  };
   export const Link = style({
-    textDecoration: 'underline',
-    color: 'var(--jp-content-link-color)'
+    ...linkStyle,
+    $nest: {
+      '&:hover': { ...linkStyle }
+    }
   });
 }
