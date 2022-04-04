@@ -6,7 +6,7 @@ import { CondaEnvItem } from './CondaEnvItem';
 import { CondaEnvToolBar, ENVIRONMENT_TOOLBAR_HEIGHT } from './CondaEnvToolBar';
 
 export const ENVIRONMENT_PANEL_WIDTH = 250;
-const HELP_HEIGHT = 39;
+const HELP_HEIGHT = 40;
 
 /**
  * Environment list properties
@@ -83,7 +83,7 @@ export const CondaEnvList: React.FunctionComponent<IEnvListProps> = (
   });
 
   return (
-    <div className={Style.Panel}>
+    <div className={Style.Panel(props.height)}>
       <CondaEnvToolBar
         isBase={isDefault}
         isPending={props.isPending}
@@ -120,14 +120,16 @@ export const CondaEnvList: React.FunctionComponent<IEnvListProps> = (
 };
 
 namespace Style {
-  export const Panel = style({
-    flexGrow: 0,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    width: ENVIRONMENT_PANEL_WIDTH
-  });
+  export const Panel = (height: number): string =>
+    style({
+      flexGrow: 0,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      width: ENVIRONMENT_PANEL_WIDTH,
+      height
+    });
 
   export const Help = style({
     height: HELP_HEIGHT,

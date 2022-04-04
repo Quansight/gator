@@ -11,6 +11,7 @@ import {
   PkgFilters
 } from './CondaPkgToolBar';
 import { PkgGraphWidget } from './PkgGraph';
+import { HelpPage } from './HelpPage';
 
 // Minimal panel width to show package description
 const PANEL_SMALL_WIDTH = 500;
@@ -580,20 +581,10 @@ export class CondaPkgPanel extends React.Component<
     const isHelpSelected = this._model.environment === '';
     if (isHelpSelected) {
       return (
-        <Panel>
-          <div className={Style.ErrorDiv}>
-            Having trouble with this JupyterLab extension? You may have better
-            luck with the{' '}
-            <a
-              className={Style.Link}
-              href={(this._model as any).baseUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Conda Store web app.
-            </a>
-          </div>
-        </Panel>
+        <HelpPage
+          height={this.props.height}
+          condaStoreBaseUrl={(this._model as any).baseUrl}
+        />
       );
     }
 
