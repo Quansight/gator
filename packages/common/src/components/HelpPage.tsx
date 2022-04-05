@@ -1,5 +1,6 @@
 import React from 'react';
 import { style } from 'typestyle';
+import screenshot from '../../style/conda-store-jupyterlab-screen-shot.png';
 
 interface IHelpPageProps {
   condaStoreBaseUrl: string;
@@ -140,6 +141,7 @@ export function HelpPage(props: IHelpPageProps): JSX.Element {
             vero nulla sit pariatur quasi ipsa! Ducimus nam atque reprehenderit
             perferendis ratione beatae ab accusantium et laudantium dolores, rem
             autem.
+            <img src={screenshot} alt="app screenshot" width={800} />
           </p>
         </div>
 
