@@ -36,14 +36,14 @@ export interface IEnvironmentManager extends IDisposable {
    * @param target name of the environment to be cloned
    * @param name name of the new environment
    */
-  clone(target: string, name: string): Promise<void>;
+  clone(target: string, name: string): Promise<string>;
   /**
    * Create a new environment
    *
    * @param name name of the new environment
    * @param type type of environment to create
    */
-  create(name: string, type?: string): Promise<void>;
+  create(name: string, type?: string): Promise<string>;
   /**
    * Signal emitted when a environment is changed.
    */
@@ -131,6 +131,7 @@ export namespace Conda {
    * Interface of the packages service
    */
   export interface IPackageManager {
+    addVersions?(packages: IPackage[]): Promise<IPackage[]>;
     /**
      * Environment in which packages are handled
      *
@@ -193,6 +194,16 @@ export namespace Conda {
      */
     remove(packages: Array<string>, environment?: string): Promise<void>;
     /**
+     * Searches current environment for packages that match a search term
+     *
+     * @async
+     * @param searchTerm The string to search for
+     *
+     * @returns A promise resolving to a list of packages that match the search
+     * term
+     */
+    searchPackages(searchTerm: string): Promise<Array<Conda.IPackage>>;
+    /**
      * Get packages dependencies list.
      *
      * @param package Package name
@@ -212,7 +223,15 @@ export namespace Conda {
      * Callback triggered when the user scrolls to the bottom of the package list.
      * Optionally loads more packages, if the result is paginated.
      */
-    loadMorePackages?: (environment?: string) => Promise<Array<Conda.IPackage>>;
+    loadInstalledPackages?: (
+      environment?: string
+    ) => Promise<Array<Conda.IPackage>>;
+    searchLabel?: string;
+    changePackages?: (
+      toRemove: string[],
+      toAddOrChange: string[],
+      env: string
+    ) => Promise<void>;
   }
 
   /**

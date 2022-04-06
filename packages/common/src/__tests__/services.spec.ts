@@ -908,7 +908,7 @@ describe('@mamba-org/gator-lab/services', () => {
       });
     });
 
-    // TOD describe("refreshAvailablePackages()", () => {})
+    // TODO describe("refreshAvailablePackages()", () => {})
 
     // TODO describe("hasDescription()", () => {})
   });

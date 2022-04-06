@@ -45,6 +45,8 @@ export interface ICondaEnvState {
    * Is the environment list loading?
    */
   isLoading: boolean;
+  isLoadingLogin: boolean;
+  isLoggedIn: boolean;
 }
 
 /** Top level React component for Jupyter Conda Manager */
@@ -55,7 +57,9 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
     this.state = {
       environments: [],
       currentEnvironment: undefined,
-      isLoading: false
+      isLoading: false,
+      isLoadingLogin: false,
+      isLoggedIn: false
     };
 
     this.handleEnvironmentChange = this.handleEnvironmentChange.bind(this);
@@ -77,6 +81,7 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
   async handleCreateEnvironment(): Promise<void> {
     let toastId: React.ReactText;
     try {
+      const environmentName = this.state.currentEnvironment;
       const body = document.createElement('div');
       const nameLabel = document.createElement('label');
       nameLabel.textContent = 'Name : ';
@@ -108,14 +113,20 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
         toastId = await INotification.inProgress(
           `Creating environment ${nameInput.value}`
         );
-        await this.props.model.create(nameInput.value, typeInput.value);
+        const name = await this.props.model.create(
+          nameInput.value,
+          typeInput.value
+        );
         INotification.update({
           toastId,
           message: `Environment ${nameInput.value} has been created.`,
           type: 'success',
           autoClose: 5000
         });
-        this.setState({ currentEnvironment: nameInput.value });
+        // check that user hasn't changed environments while we were fetching
+        if (this.state.currentEnvironment === environmentName) {
+          this.setState({ currentEnvironment: name ? name : undefined });
+        }
         this.loadEnvironments();
       }
     } catch (error) {
@@ -162,15 +173,19 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
         toastId = await INotification.inProgress(
           `Cloning environment ${environmentName}`
         );
-        await this.props.model.clone(environmentName, nameInput.value);
+        const name = await this.props.model.clone(
+          environmentName,
+          nameInput.value
+        );
         INotification.update({
           toastId,
           message: `Environment ${nameInput.value} created.`,
           type: 'success',
           autoClose: 5000
         });
+        // check that user hasn't changed environments while we were fetching
         if (this.state.currentEnvironment === environmentName) {
-          this.setState({ currentEnvironment: nameInput.value });
+          this.setState({ currentEnvironment: name ? name : undefined });
         }
         this.loadEnvironments();
       }
@@ -367,7 +382,8 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
             newState.environments.find(env => env.is_default) ||
             // in case no environment is_default just load the first environment
             newState.environments[0];
-          newState.currentEnvironment = defaultEnvironment.name;
+          newState.currentEnvironment =
+            defaultEnvironment && defaultEnvironment.name;
           newState.channels = await this.props.model.getChannels(
             newState.currentEnvironment
           );
@@ -384,11 +400,45 @@ export class NbConda extends React.Component<ICondaEnvProps, ICondaEnvState> {
     }
   }
 
+  async checkLoggedIn(): Promise<void> {
+    if (this.state.isLoadingLogin) {
+      return;
+    }
+    this.setState({ isLoadingLogin: true });
+    const isLoggedIn = await (this.props.model as any).isLoggedIn();
+    this.setState({
+      isLoadingLogin: false,
+      isLoggedIn
+    });
+  }
+
   componentDidMount(): void {
     this.loadEnvironments();
+    this.checkLoggedIn();
   }
 
   render(): JSX.Element {
+    if (this.state.isLoadingLogin) {
+      return <div className={Style.Panel} />;
+    } else if (!this.state.isLoggedIn) {
+      return (
+        <div className={Style.Panel}>
+          <div className={Style.NotLoggedIn}>
+            Oops, you are not logged in to Conda Store. Please{' '}
+            <a
+              className={Style.Link}
+              href={(this.props.model as any).loginUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              open a new tab to log in to Conda Store
+            </a>
+            , then come back to this tab and refresh the page.
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className={Style.Panel}>
         <CondaEnvList
@@ -422,5 +472,20 @@ namespace Style {
     display: 'flex',
     flexDirection: 'row',
     borderCollapse: 'collapse'
+  });
+
+  const linkStyle = {
+    color: 'var(--jp-content-link-color)',
+    textDecoration: 'underline'
+  };
+  export const Link = style({
+    ...linkStyle,
+    $nest: {
+      '&:hover': { ...linkStyle }
+    }
+  });
+
+  export const NotLoggedIn = style({
+    margin: '20px 0 0 20px'
   });
 }

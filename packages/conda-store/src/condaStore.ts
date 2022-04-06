@@ -4,7 +4,7 @@
  * Note: fetch is assumed to be global (execution environment: web browser).
  */
 
-import { parse, stringify } from 'yaml';
+import yaml from 'yaml';
 import { URLExt } from '@jupyterlab/coreutils';
 
 export interface ICondaStoreEnvironment {
@@ -17,10 +17,29 @@ export interface ICondaStoreEnvironment {
   };
 }
 
+export enum BuildStatus {
+  QUEUED = 'QUEUED',
+  BUILDING = 'BUILDING',
+  COMPLETED = 'COMPLETED',
+  FAILED = 'FAILED'
+}
+export interface ICondaStoreBuild {
+  status: BuildStatus;
+  specification: {
+    spec: {
+      name: string;
+      dependencies: string[];
+    };
+  };
+}
+
 export interface ICondaStorePackage {
   name: string;
   version: string;
-  channel_id: number;
+  channel: {
+    id: number;
+    name: string;
+  };
   id: number;
   license: string;
   sha256: string;
@@ -128,14 +147,45 @@ export async function fetchEnvironments(
 export async function searchPackages(
   baseUrl: string,
   term: string
-): Promise<Array<ICondaStorePackage>> {
+): Promise<IPaginatedResult<ICondaStorePackage>> {
   const url = createApiUrl(baseUrl, `/package/?search=${term}`);
   const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   } else {
-    return [];
+    return {};
   }
+}
+
+export async function getAllPackagesMatchingSearch(
+  baseUrl: string,
+  term: string
+): Promise<Array<ICondaStorePackage>> {
+  let matches: Array<ICondaStorePackage> = [];
+  let count = 0;
+  let page = 0;
+  let size = 100;
+  let data: Array<ICondaStorePackage>;
+  let hasMorePackages = true;
+
+  while (hasMorePackages) {
+    ({ count, data, page, size } = await fetchPackages(
+      baseUrl,
+      page + 1,
+      size,
+      term,
+      true
+    ));
+    console.log(
+      `fetched page ${page} of ${
+        count / size
+      } pages for search term ${term} with baseUrl ${baseUrl}`
+    );
+    hasMorePackages = page * size < count;
+    matches = [...matches, ...data];
+  }
+
+  return matches;
 }
 
 /**
@@ -149,17 +199,49 @@ export async function searchPackages(
 export async function fetchPackages(
   baseUrl: string,
   page = 1,
-  size = 100
+  size = 100,
+  search = '',
+  isExact = false
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
   const url = createApiUrl(
     baseUrl,
-    `/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name`
+    `/package/?page=${page}&size=${size}&distinct_on=name&distinct_on=version&sort_by=name` +
+      (search ? `&search=${encodeURIComponent(search)}` : '') +
+      (isExact ? '&exact=1' : '')
   );
   const response = await fetch(url);
   if (response.ok) {
     return await response.json();
   } else {
     return {};
+  }
+}
+
+export async function fetchBuild(
+  baseUrl: string,
+  buildId: number
+): Promise<ICondaStoreBuild> {
+  const url = createApiUrl(baseUrl, `/build/${buildId}/`);
+  const response = await fetch(url);
+  if (response.ok) {
+    const json = await response.json();
+    return json.data;
+  }
+}
+
+export async function fetchCurrentBuildId(
+  baseUrl: string,
+  namespace: string,
+  environment: string
+): Promise<number | void> {
+  const url = createApiUrl(
+    baseUrl,
+    `/environment/${namespace}/${environment}/`
+  );
+  const response = await fetch(url);
+  if (response.ok) {
+    const json = await response.json();
+    return json.data.current_build_id;
   }
 }
 
@@ -175,36 +257,58 @@ export async function fetchPackages(
  */
 export async function fetchEnvironmentPackages(
   baseUrl: string,
-  namespace: string,
-  environment: string,
-  page = 1,
-  size = 100
-): Promise<IPaginatedResult<ICondaStorePackage>> {
-  if (namespace === undefined || environment === undefined) {
-    console.error(
-      `Error: invalid arguments to fetchEnvironmentPackages: envNamespace ${namespace} envName ${environment}`
-    );
-    return {};
-  }
+  currentBuildId: number
+): Promise<Array<ICondaStorePackage>> {
+  let packages: Array<ICondaStorePackage> = [];
+  let data: Array<ICondaStorePackage>;
+  let count = 1;
+  let page = 1;
+  const size = 100;
 
-  const environmentInfoUrl = createApiUrl(
-    baseUrl,
-    `/environment/${namespace}/${environment}/`
-  );
-  const environmentInfoResponse = await fetch(environmentInfoUrl);
-
-  if (environmentInfoResponse.ok) {
-    const { data } = await environmentInfoResponse.json();
+  while (packages.length < count) {
     const url = createApiUrl(
       baseUrl,
-      `/build/${data.current_build_id}/packages/?page=${page}&size=${size}&sort_by=name`
+      `/build/${currentBuildId}/packages/?page=${page}&size=${size}&sort_by=name`
     );
     const response = await fetch(url);
-    if (response.ok) {
-      return response.json();
-    }
+    ({ data, count } = await response.json());
+    page++;
+    packages = [...packages, ...data];
   }
-  return {};
+
+  return packages;
+}
+
+export async function fetchSpecifiedPackages(
+  baseUrl: string,
+  namespace: string,
+  environment: string
+): Promise<Array<string>> {
+  if (namespace === undefined || environment === undefined) {
+    console.error(
+      `Error: invalid arguments to fetchSpecifiedPackages: envNamespace ${namespace} envName ${environment}`
+    );
+    return [];
+  }
+
+  const currentBuildId = await fetchCurrentBuildId(
+    baseUrl,
+    namespace,
+    environment
+  );
+
+  if (currentBuildId === undefined) {
+    return [];
+  }
+
+  const currentBuild = await fetchBuild(baseUrl, currentBuildId as number);
+
+  if (currentBuild === undefined) {
+    return [];
+  }
+
+  const { dependencies } = currentBuild.specification.spec;
+  return dependencies;
 }
 
 /**
@@ -220,7 +324,10 @@ export async function fetchBuildPackages(
   baseUrl: string,
   build_id: number
 ): Promise<IPaginatedResult<ICondaStorePackage>> {
-  const url = createApiUrl(baseUrl, `/build/${build_id}/`);
+  const url = createApiUrl(
+    baseUrl,
+    `/build/${build_id}/packages/?sort_by=name`
+  );
   const response = await fetch(url);
   if (response.ok) {
     return await response.json();
@@ -256,13 +363,13 @@ export async function fetchChannels(
  * dependencies
  * @returns {Promise<Response>}
  */
-export async function specifyEnvironment(
+export function specifyEnvironment(
   baseUrl: string,
   namespace: string,
   specification: string
 ): Promise<Response> {
   const url = createApiUrl(baseUrl, '/specification/');
-  return await fetch(url, {
+  return fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -282,18 +389,17 @@ export async function specifyEnvironment(
  * @param {Array<string>} dependencies - List of string package names to be added to the spec.
  * @returns {Promise<void>}
  */
-export async function createEnvironment(
+export function createEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string,
   dependencies: Array<string>
-): Promise<void> {
+): Promise<Response> {
   const specification: ICondaStoreSpecification = {
     name: environment,
     dependencies
   };
-  await specifyEnvironment(baseUrl, namespace, stringify(specification));
-  return;
+  return specifyEnvironment(baseUrl, namespace, yaml.stringify(specification));
 }
 
 /**
@@ -314,7 +420,7 @@ export async function cloneEnvironment(
   existingEnvironment: string,
   namespace: string,
   environment: string
-): Promise<void> {
+): Promise<Response> {
   // Get specification for existing environment
   const specificationResponse = await exportEnvironment(
     baseUrl,
@@ -324,21 +430,12 @@ export async function cloneEnvironment(
 
   // Modify specification so that it uses the provided environment name
   const specificationYaml = await specificationResponse.text();
-  const specification: ICondaStoreSpecification = parse(specificationYaml);
+  const specification: ICondaStoreSpecification = yaml.parse(specificationYaml);
   specification.name = environment;
 
   // Pass specification to the API to create new environment based on the
   // provided existiing environment
-  const response = await specifyEnvironment(
-    baseUrl,
-    namespace,
-    stringify(specification)
-  );
-  if (!response.ok) {
-    console.error(await response.json());
-    throw new Error('Could not clone environment, see browser console.');
-  }
-  return;
+  return specifyEnvironment(baseUrl, namespace, yaml.stringify(specification));
 }
 
 /**
@@ -348,64 +445,20 @@ export async function cloneEnvironment(
  * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
  * @param {string} namespace - Namespace the environment belongs to.
  * @param {string} environment - Name of the environment.
- * @returns {Promise<void>}
+ * @returns {Promise<Response>}
  */
-export async function removeEnvironment(
+export function removeEnvironment(
   baseUrl: string,
   namespace: string,
   environment: string
-): Promise<void> {
+): Promise<Response> {
   const url = createApiUrl(
     baseUrl,
     `/environment/${namespace}/${environment}/`
   );
-  await fetch(url, {
+  return fetch(url, {
     method: 'DELETE'
   });
-  return;
-}
-
-/**
- * Remove one or more packages from an environment.
- *
- * @async
- * @param {string} baseUrl - Base URL of the conda-store server; usually http://localhost:5000
- * @param {string} namespace - Namespace in which the environment resides
- * @param {string} environment - Environment for which packages are to be removed
- * @param {Array<string>} packages - Packages to remove
- * @returns {Promise<void>}
- */
-export async function removePackages(
-  baseUrl: string,
-  namespace: string,
-  environment: string,
-  packages: Array<string>
-): Promise<void> {
-  // Fetch all the packages from the current environment
-  let page = 1;
-  let count, data, size;
-  let hasMorePackages = true;
-  let installed: Array<ICondaStorePackage> = [];
-
-  while (hasMorePackages) {
-    ({ count, data, page, size } = await fetchEnvironmentPackages(
-      baseUrl,
-      namespace,
-      environment,
-      page
-    ));
-    hasMorePackages = page * size < count;
-    installed = [...installed, ...data];
-  }
-
-  // Reconstruct the specification for the current environment, minus the packages to delete
-  const toDelete = new Set(packages);
-  const dependencies = installed
-    .filter(({ name }) => !toDelete.has(name))
-    .map(({ name, version }) => `${name}=${version}`);
-
-  await createEnvironment(baseUrl, namespace, environment, dependencies);
-  return;
 }
 
 /**
@@ -424,13 +477,64 @@ export async function exportEnvironment(
   environment: string
 ): Promise<Response> {
   // First get the build ID of the requested environment
-  const enviornmentInfoUrl = createApiUrl(
+  const currentBuildId = await fetchCurrentBuildId(
     baseUrl,
-    `/environment/${namespace}/${environment}/`
+    namespace,
+    environment
   );
-  const environmentInfoResponse = await fetch(enviornmentInfoUrl);
+  if (currentBuildId === undefined) {
+    throw new Error(
+      'Could not fetch current build id while attempting to export environment'
+    );
+  }
 
-  const { data } = await environmentInfoResponse.json();
-  const url = createApiUrl(baseUrl, `/build/${data.current_build_id}/yaml/`);
-  return await fetch(url);
+  // Then get the data for the current build
+  const url = createApiUrl(baseUrl, `/build/${currentBuildId}`);
+  const response = await fetch(url);
+  if (!response.ok) {
+    console.error(await response.text());
+    throw new Error(
+      `Could not fetch the current build while attempting to export environment. Conda Store server responded with error code ${response.status}. See browser console for error response body.`
+    );
+  }
+
+  // Then extract the spec-file data, convert to yaml, and return as response
+  const {
+    data: {
+      specification: { spec }
+    }
+  } = await response.json();
+  // TODO: create endpoint in conda store server api to return the
+  // environment's spec as yaml so we don't have to do this hack
+  // where we cast the response from json to yaml
+  const specificationYaml = yaml.stringify(spec);
+  const blob = new Blob([specificationYaml], { type: 'text/yaml' });
+  const yamlResponse = new Response(blob, response);
+  return yamlResponse;
+}
+
+// Returns promise that resolves with either COMPLETED or FAILED
+export function getFinalBuildStatus(
+  baseUrl: string,
+  buildId: number,
+  waitTime = 5000
+): Promise<'COMPLETED' | 'FAILED'> {
+  return new Promise(resolve => {
+    const getBuildStatus = async () => {
+      const { status } = await fetchBuild(baseUrl, buildId);
+      console.log(`Build id ${buildId} status: ${status}`);
+      if (status === BuildStatus.COMPLETED || status === BuildStatus.FAILED) {
+        resolve(status);
+      } else {
+        // wait a bit, then check again
+        setTimeout(getBuildStatus, waitTime);
+      }
+    };
+    getBuildStatus();
+  });
+}
+
+export function fetchPermissions(baseUrl: string): Promise<Response> {
+  const url = createApiUrl(baseUrl, '/permission/');
+  return fetch(url);
 }

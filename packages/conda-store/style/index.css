@@ -1,0 +1,7 @@
+.jp-NbConda-linklike-button {
+  text-decoration: underline;
+  border: none;
+  color: var(--jp-content-link-color);
+  background-color: transparent;
+  cursor: pointer;
+}

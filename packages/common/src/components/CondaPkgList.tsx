@@ -51,6 +51,8 @@ export interface IPkgListProps {
    * Reference with triggers callback when the user scrolls to the bottom of the package list.
    */
   observe: (element?: HTMLElement) => void;
+  isLoadingVersions: boolean;
+  hasMorePackages: boolean;
 }
 
 /**
@@ -69,6 +71,8 @@ export function CondaPkgList({
   hasDescription,
   height,
   packages,
+  hasMorePackages,
+  isLoadingVersions,
   onPkgClick,
   onPkgChange,
   onPkgGraph,
@@ -77,6 +81,8 @@ export function CondaPkgList({
   hasDescription: boolean;
   height: number;
   packages: Conda.IPackage[];
+  hasMorePackages: boolean;
+  isLoadingVersions: boolean;
   onPkgClick: (pkg: Conda.IPackage) => void;
   onPkgChange: (pkg: Conda.IPackage, version: string) => void;
   onPkgGraph: (pkg: Conda.IPackage) => void;
@@ -84,11 +90,10 @@ export function CondaPkgList({
 }): JSX.Element {
   const { observe } = useInView({
     rootMargin: '200px 0px',
-    onChange: async ({ inView, unobserve, observe }) => {
-      if (inView) {
+    onChange: async ({ inView, unobserve }) => {
+      if (hasMorePackages && inView) {
         unobserve();
         await onPkgBottomHit();
-        observe();
       }
     }
   });
@@ -97,6 +102,7 @@ export function CondaPkgList({
       hasDescription={hasDescription}
       height={height}
       packages={packages}
+      isLoadingVersions={isLoadingVersions}
       onPkgClick={onPkgClick}
       onPkgChange={onPkgChange}
       onPkgGraph={onPkgGraph}
@@ -112,43 +118,51 @@ class CondaPkgView extends React.Component<IPkgListProps> {
     packages: []
   };
 
-  protected changeRender = (pkg: Conda.IPackage): JSX.Element => (
-    <div className={'lm-Widget'}>
-      <HTMLSelect
-        className={classes(Style.VersionSelection, CONDA_PACKAGE_SELECT_CLASS)}
-        value={pkg.version_selected}
-        onClick={(evt: React.MouseEvent): void => {
-          evt.stopPropagation();
-        }}
-        onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void =>
-          this.props.onPkgChange(pkg, evt.target.value)
-        }
-        aria-label="Package versions"
-      >
-        <option key="-3" value={'none'}>
-          Remove
-        </option>
-        {!pkg.version_installed && (
-          <option key="-2" value={''}>
-            Install
+  protected changeRender = (pkg: Conda.IPackage): JSX.Element => {
+    if (this.props.isLoadingVersions) {
+      return <span>Loading versions...</span>;
+    }
+    return (
+      <div className={'lm-Widget'}>
+        <HTMLSelect
+          className={classes(
+            Style.VersionSelection,
+            CONDA_PACKAGE_SELECT_CLASS
+          )}
+          value={pkg.version_selected}
+          onClick={(evt: React.MouseEvent): void => {
+            evt.stopPropagation();
+          }}
+          onChange={(evt: React.ChangeEvent<HTMLSelectElement>): void =>
+            this.props.onPkgChange(pkg, evt.target.value)
+          }
+          aria-label="Package versions"
+        >
+          <option key="-3" value={'none'}>
+            Remove
           </option>
-        )}
-        {pkg.updatable && (
-          <option key="-1" value={''}>
-            Update
-          </option>
-        )}
-        {
-          // Some packages have duplicate version strings; make them unique here
-          [...new Set(pkg.version)].map((v: string) => (
-            <option key={v} value={v}>
-              {v}
+          {!pkg.version_installed && (
+            <option key="-2" value={''}>
+              Install
             </option>
-          ))
-        }
-      </HTMLSelect>
-    </div>
-  );
+          )}
+          {pkg.updatable && (
+            <option key="-1" value={''}>
+              Update
+            </option>
+          )}
+          {
+            // Some packages have duplicate version strings; make them unique here
+            [...new Set(pkg.version)].map((v: string) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))
+          }
+        </HTMLSelect>
+      </div>
+    );
+  };
 
   protected iconRender = (pkg: Conda.IPackage): JSX.Element => {
     if (pkg.version_installed) {
@@ -222,18 +236,9 @@ class CondaPkgView extends React.Component<IPkgListProps> {
   };
 
   protected versionRender = (pkg: Conda.IPackage): JSX.Element => (
-    <a
-      className={pkg.updatable ? Style.Updatable : undefined}
-      href="#"
-      onClick={(evt): void => {
-        evt.stopPropagation();
-        this.props.onPkgGraph(pkg);
-      }}
-      rel="noopener noreferrer"
-      title="Show dependency graph"
-    >
+    <span className={pkg.updatable ? Style.Updatable : undefined}>
       {pkg.version_installed}
-    </a>
+    </span>
   );
 
   protected rowClassName = (index: number, pkg: Conda.IPackage): string => {
@@ -266,7 +271,11 @@ class CondaPkgView extends React.Component<IPkgListProps> {
         </div>
         {this.props.hasDescription && (
           <div
-            className={classes(Style.CellSummary, Style.DescriptionSize)}
+            className={classes(
+              Style.CellSummary,
+              Style.DescriptionSize,
+              Style.DescriptionAlign
+            )}
             role="gridcell"
             title={pkg.summary}
           >
@@ -278,13 +287,6 @@ class CondaPkgView extends React.Component<IPkgListProps> {
         </div>
         <div className={classes(Style.Cell, Style.ChangeSize)} role="gridcell">
           {this.changeRender(pkg)}
-        </div>
-        <div
-          className={classes(Style.Cell, Style.ChannelSize)}
-          role="gridcell"
-          title={pkg.channel}
-        >
-          {pkg.channel}
         </div>
       </div>
     );
@@ -332,19 +334,25 @@ class CondaPkgView extends React.Component<IPkgListProps> {
                   >
                     Change To
                   </div>
-                  <div
-                    className={classes(Style.Cell, Style.ChannelSize)}
-                    role="columnheader"
-                  >
-                    Channel
-                  </div>
                 </div>
                 <FixedSizeList
                   height={Math.max(0, this.props.height - HEADER_HEIGHT)}
                   overscanCount={3}
                   itemCount={this.props.packages.length}
                   itemData={this.props.packages}
-                  itemKey={(index, data): React.Key => data[index].name}
+                  itemKey={(index, data): React.Key =>
+                    data[index].name +
+                    // Force React to create a new DOM node if additional
+                    // package versions are added to the same row in the list
+                    // view. A new DOM node will trigger the
+                    // IntersectionObserver callback, which fixes an issue where
+                    // infinite scrolling would stop working if the next batch
+                    // of results doesn't add any new rows to the list but just
+                    // adds new versions to the dropdown of the last row. A good
+                    // example of this is the package `aws`, which has has
+                    // hundreds of versions.
+                    data[index].version.slice(-1)[0]
+                  }
                   itemSize={40}
                   width={width}
                 >
@@ -408,6 +416,10 @@ namespace Style {
   export const StatusSize = style({ flex: '0 0 12px', padding: '0px 2px' });
   export const NameSize = style({ flex: '1 1 200px' });
   export const DescriptionSize = style({ flex: '5 5 250px' });
+  export const DescriptionAlign = style({
+    display: 'flex',
+    alignItems: 'center'
+  });
   export const VersionSize = style({ flex: '0 0 90px' });
   export const ChangeSize = style({ flex: '0 0 120px' });
   export const ChannelSize = style({ flex: '1 1 120px' });

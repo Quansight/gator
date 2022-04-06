@@ -6,6 +6,7 @@ import { CondaEnvItem } from './CondaEnvItem';
 import { CondaEnvToolBar, ENVIRONMENT_TOOLBAR_HEIGHT } from './CondaEnvToolBar';
 
 export const ENVIRONMENT_PANEL_WIDTH = 250;
+const HELP_HEIGHT = 40;
 
 /**
  * Environment list properties
@@ -82,7 +83,7 @@ export const CondaEnvList: React.FunctionComponent<IEnvListProps> = (
   });
 
   return (
-    <div className={Style.Panel}>
+    <div className={Style.Panel(props.height)}>
       <CondaEnvToolBar
         isBase={isDefault}
         isPending={props.isPending}
@@ -96,23 +97,54 @@ export const CondaEnvList: React.FunctionComponent<IEnvListProps> = (
       <div
         id={CONDA_ENVIRONMENT_PANEL_ID}
         className={Style.ListEnvs(
-          props.height - ENVIRONMENT_TOOLBAR_HEIGHT - 32
+          props.height - ENVIRONMENT_TOOLBAR_HEIGHT - HELP_HEIGHT - 32
         )}
       >
-        {listItems}
+        {props.isPending || listItems.length ? (
+          listItems
+        ) : (
+          <span>To begin, click the + button above.</span>
+        )}
+      </div>
+      <div
+        className={[
+          Style.Help,
+          props.selected === '' ? Style.HelpSelected : ''
+        ].join(' ')}
+        onClick={() => props.onSelectedChange('')}
+      >
+        Conda Store Help
       </div>
     </div>
   );
 };
 
 namespace Style {
-  export const Panel = style({
-    flexGrow: 0,
-    flexShrink: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    width: ENVIRONMENT_PANEL_WIDTH
+  export const Panel = (height: number): string =>
+    style({
+      flexGrow: 0,
+      flexShrink: 0,
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      width: ENVIRONMENT_PANEL_WIDTH,
+      height
+    });
+
+  export const Help = style({
+    height: HELP_HEIGHT,
+    borderTop: '1px solid var(--jp-border-color2)',
+    padding: 10,
+    $nest: {
+      '&:hover': {
+        backgroundColor: 'var(--jp-layout-color2)',
+        border: '1px solid var(--jp-border-color2)'
+      }
+    }
+  });
+
+  export const HelpSelected = style({
+    backgroundColor: 'var(--jp-layout-color2)'
   });
 
   export const ListEnvs = (height: number): string =>

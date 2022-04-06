@@ -6,8 +6,7 @@ import {
   addIcon,
   Button,
   closeIcon,
-  downloadIcon,
-  fileUploadIcon
+  downloadIcon
 } from '@jupyterlab/ui-components';
 import * as React from 'react';
 import { style } from 'typestyle';
@@ -92,11 +91,6 @@ export const CondaEnvToolBar = (props: ICondaEnvToolBarProps): JSX.Element => {
             style={{ color: 'var(--jp-inverse-layout-color3)' }}
           />
         </Button>
-        <ToolbarButtonComponent
-          icon={fileUploadIcon}
-          tooltip="Import"
-          onClick={props.onImport}
-        />
         <ToolbarButtonComponent
           icon={downloadIcon}
           tooltip="Export"

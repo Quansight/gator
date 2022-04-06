@@ -1,5 +1,4 @@
 import { faCartArrowDown } from '@fortawesome/free-solid-svg-icons/faCartArrowDown';
-import { faExternalLinkSquareAlt } from '@fortawesome/free-solid-svg-icons/faExternalLinkSquareAlt';
 import { faSyncAlt } from '@fortawesome/free-solid-svg-icons/faSyncAlt';
 import { faUndoAlt } from '@fortawesome/free-solid-svg-icons/faUndoAlt';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -28,9 +27,9 @@ export interface ICondaPkgToolBarProps {
    */
   category: PkgFilters;
   /**
-   * Are there some package modifications?
+   * Number of package modifications the user has queued
    */
-  hasSelection: boolean;
+  selectionCount: number;
   /**
    * Are there some packages updatable?
    */
@@ -63,56 +62,69 @@ export interface ICondaPkgToolBarProps {
    * Refresh available packages handler
    */
   onRefreshPackages: () => void;
+  filterDisabled: boolean;
+  searchPlaceholder: string;
+  onToggleSelected: (shouldShowSelected: boolean) => void;
 }
 
 export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
+  const hasSelection = props.selectionCount > 0;
+  const isShowingSelection = props.category === PkgFilters.Selected;
   return (
     <div className={`lm-Widget ${CONDA_PACKAGES_TOOLBAR_CLASS} jp-Toolbar`}>
-      <div className="lm-Widget jp-Toolbar-item">
-        <HTMLSelect
-          value={props.category}
-          onChange={props.onCategoryChanged}
-          aria-label="Package filter"
-        >
-          <option value={PkgFilters.All}>All</option>
-          <option value={PkgFilters.Installed}>Installed</option>
-          <option value={PkgFilters.Available}>Not installed</option>
-          <option value={PkgFilters.Updatable}>Updatable</option>
-          <option value={PkgFilters.Selected}>Selected</option>
-        </HTMLSelect>
-      </div>
+      {!props.filterDisabled && (
+        <div className="lm-Widget jp-Toolbar-item">
+          <HTMLSelect
+            value={props.category}
+            onChange={props.onCategoryChanged}
+            aria-label="Package filter"
+          >
+            <option value={PkgFilters.All}>All</option>
+            <option value={PkgFilters.Installed}>Installed</option>
+            <option value={PkgFilters.Available}>Not installed</option>
+            <option value={PkgFilters.Updatable}>Updatable</option>
+            <option value={PkgFilters.Selected}>Selected</option>
+          </HTMLSelect>
+        </div>
+      )}
       <div className="lm-Widget jp-Toolbar-item">
         <div className={classes('jp-NbConda-search-wrapper', Style.Search)}>
           <InputGroup
             className={Style.SearchInput}
             type="text"
-            placeholder="Search Packages"
+            placeholder={props.searchPlaceholder || 'Search Packages'}
             onChange={props.onSearch}
             value={props.searchTerm}
             rightIcon="search"
           />
         </div>
       </div>
+      {props.filterDisabled && (hasSelection || isShowingSelection) && (
+        <div className={classes(Style.ShowSelected)}>
+          <label>
+            <input
+              name="package-filter"
+              type="radio"
+              checked={!props.searchTerm && isShowingSelection}
+              onChange={() => props.onToggleSelected(true)}
+            />
+            Selected ({props.selectionCount})
+          </label>
+          <label>
+            <input
+              name="package-filter"
+              type="radio"
+              checked={!props.searchTerm && !isShowingSelection}
+              onChange={() => props.onToggleSelected(false)}
+            />
+            Installed
+          </label>
+        </div>
+      )}
       <div className="lm-Widget jp-Toolbar-spacer jp-Toolbar-item" />
       <Button
         className="jp-ToolbarButtonComponent"
-        disabled={!props.hasUpdate}
-        minimal
-        onMouseDown={props.onUpdateAll}
-        title="Update all packages"
-      >
-        <FontAwesomeIcon
-          icon={faExternalLinkSquareAlt}
-          style={{
-            color: props.hasUpdate
-              ? 'var(--jp-accent-color0)'
-              : 'var(--jp-inverse-layout-color3)'
-          }}
-        />
-      </Button>
-      <Button
-        className="jp-ToolbarButtonComponent"
-        disabled={!props.hasSelection}
+        disabled={!hasSelection}
         minimal
         onMouseDown={props.onApply}
         title="Apply package modifications"
@@ -120,7 +132,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
         <FontAwesomeIcon
           icon={faCartArrowDown}
           style={{
-            color: props.hasSelection
+            color: hasSelection
               ? 'var(--jp-brand-color0)'
               : 'var(--jp-inverse-layout-color3)'
           }}
@@ -128,7 +140,7 @@ export const CondaPkgToolBar = (props: ICondaPkgToolBarProps): JSX.Element => {
       </Button>
       <Button
         className="jp-ToolbarButtonComponent"
-        disabled={!props.hasSelection}
+        disabled={!hasSelection}
         minimal
         onMouseDown={props.onCancel}
         title="Clear package modifications"
@@ -167,5 +179,10 @@ namespace Style {
 
   export const Search = style({
     padding: '4px'
+  });
+
+  export const ShowSelected = style({
+    display: 'flex',
+    alignItems: 'center'
   });
 }
